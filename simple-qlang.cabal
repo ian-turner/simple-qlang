@@ -38,7 +38,7 @@ license-file:       LICENSE
 author:             ian-turner
 
 -- An email address to which users can send suggestions, bug reports, and patches.
-maintainer:         i.r.turner55@gmail.com
+maintainer:         irturner@mailbox.sc.edu
 
 -- A copyright notice.
 -- copyright:
@@ -69,6 +69,8 @@ executable simple-qlang
 
     -- Other library packages from which modules are imported.
     build-depends:    base
+                      , mtl
+                      , containers
                       , parsec
 
     -- Directories containing source files.

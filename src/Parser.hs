@@ -76,6 +76,7 @@ parensOrTuple = between (symbol "(") (symbol ")") inner
     inner = do
         es <- expr `sepBy1` symbol ","
         case es of
+            []  -> return $ Tuple []
             [e] -> return $ Parens e
             ps  -> return $ Tuple ps
 
@@ -136,7 +137,6 @@ defnExpr = do
     reserved "defn"
     id <- identifier
     p <- pattern
-    symbol "="
     e <- expr
     return $ Defn id p e
 
