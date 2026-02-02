@@ -10,9 +10,6 @@ type Parser a = Parsec String () a
 data Expr = Unit
             | Num Integer
             | Var String
-            | Parens Expr
-            | PrefixOp String Expr
-            | BinaryOp Expr String Expr
             | Tuple [Expr]
             | App Expr Expr
             | Let [String] Expr Expr
