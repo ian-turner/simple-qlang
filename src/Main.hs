@@ -12,5 +12,5 @@ main = do
         (a:as) -> do
             fileContent <- readFile a
             let fileLines = lines fileContent
-                exprs = map (parseWithWhitespace expr) fileLines
+                exprs = map (parseWithWhitespace topLevelExpr) fileLines
             mapM_ (\x -> putStrLn (show x)) exprs

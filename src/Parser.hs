@@ -17,6 +17,7 @@ data Expr = Unit
             | App Expr Expr
             | Let [String] Expr Expr
             | Lambda [String] Expr
+            | EqExpr String Expr
             deriving (Show, Eq)
 
 reservedNames :: [String]
@@ -111,6 +112,16 @@ lamExpr = do
 
 expr :: Parser Expr
 expr = lamExpr <|> letExpr <|> term
+
+eqExpr :: Parser Expr
+eqExpr = do
+    id <- identifier
+    symbol "="
+    e <- expr
+    return $ EqExpr id e
+
+topLevelExpr :: Parser Expr
+topLevelExpr = eqExpr <|> expr
 
 parseWithEof :: Parser a -> String -> Either ParseError a
 parseWithEof p = parse (p <* eof) ""
