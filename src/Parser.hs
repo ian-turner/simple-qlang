@@ -16,9 +16,7 @@ data Expr = Unit
             | Lambda [String] Expr
             deriving (Show, Eq)
 
-data Stmt = VarDef String Expr
-            | FunDef String [String] Expr
-            deriving (Show, Eq)
+data Stmt = VarDef String Expr deriving (Show, Eq)
 
 reservedNames :: [String]
 reservedNames = ["let", "in"]
@@ -113,14 +111,17 @@ lamExpr = do
 expr :: Parser Expr
 expr = lamExpr <|> letExpr <|> term
 
-statement :: Parser Stmt
-statement = do
+varDef :: Parser Stmt
+varDef = do
     ids <- many identifier
     symbol "="
     e <- expr
     case ids of
         [id] -> return $ VarDef id e
-        (funId:ids') -> return $ FunDef funId ids' e
+        (funId:ids') -> return $ VarDef funId (Lambda ids' e)
+
+statement :: Parser Stmt
+statement = varDef
 
 parseWithEof :: Parser a -> String -> Either ParseError a
 parseWithEof p = parse (p <* eof) ""
