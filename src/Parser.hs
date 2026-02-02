@@ -10,9 +10,6 @@ type Parser a = Parsec String () a
 data Parentheses = Parentheses Integer
                    deriving (Eq,Show)
 
-data SingleAdd = SingleAdd Integer Integer
-                 deriving (Eq,Show)
-
 data Pattern = PUnit
                | PVar String
                | PTuple [Pattern]
@@ -25,14 +22,13 @@ data Expr = Unit
             | PrefixOp String Expr
             | BinaryOp Expr String Expr
             | Tuple [Expr]
-            | Call Expr [Expr]
             | App Expr Expr
             | Let Pattern Expr Expr
-            | Defn String Pattern Expr
+            | Lambda Pattern Expr
             deriving (Show, Eq)
 
 reservedNames :: [String]
-reservedNames = ["let", "in", "defn"]
+reservedNames = ["let", "in"]
 
 whitespace :: Parser ()
 whitespace = void $ many $ oneOf " \n\t"
@@ -106,29 +102,6 @@ pattern = unitPattern <|> tuplePattern <|> simplePattern
             [p] -> return p
             ps' -> return $ PTuple ps'
 
-table = [[prefix "-", prefix "+"]
-        ,[binary "^" E.AssocLeft]
-        ,[binary "*" E.AssocLeft
-         ,binary "/" E.AssocLeft
-         ,binary "%" E.AssocLeft]
-        ,[binary "+" E.AssocLeft
-         ,binary "-" E.AssocLeft]
-        ,[binary "<" E.AssocNone
-         ,binary ">" E.AssocNone]
-        ,[binary "==" E.AssocRight]
-        ,[prefix "not"]
-        ,[binary "and" E.AssocLeft]
-        ,[binary "or" E.AssocLeft]
-        ]
-  where
-    binary name assoc =
-        E.Infix (mkBinOp name <$ symbol name) assoc
-    mkBinOp nm a b = BinaryOp a nm b
-    prefix name = E.Prefix (PrefixOp name <$ symbol name)
-
-logicExpr :: Parser Expr
-logicExpr = E.buildExpressionParser table term
-
 letExpr :: Parser Expr
 letExpr = do
     reserved "let"
@@ -139,16 +112,16 @@ letExpr = do
     e2 <- expr
     return $ Let p e1 e2
 
-defnExpr :: Parser Expr
-defnExpr = do
-    reserved "defn"
-    id <- identifier
+lamExpr :: Parser Expr
+lamExpr = do
+    reserved "\\"
     p <- pattern
+    symbol "->"
     e <- expr
-    return $ Defn id p e
+    return $ Lambda p e
 
 expr :: Parser Expr
-expr = defnExpr <|> letExpr <|> logicExpr
+expr = lamExpr <|> letExpr <|> term
 
 parseWithEof :: Parser a -> String -> Either ParseError a
 parseWithEof p = parse (p <* eof) ""
