@@ -72,7 +72,7 @@ unitParensOrTuple = unitPattern <|> (between (symbol "(") (symbol ")") inner)
     inner = do
         es <- expr `sepBy1` symbol ","
         case es of
-            [e] -> return $ Parens e
+            [e] -> return e
             ps  -> return $ Tuple ps
 
 atom :: Parser Expr
