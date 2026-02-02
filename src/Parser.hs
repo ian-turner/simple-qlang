@@ -7,9 +7,6 @@ import qualified Text.Parsec.Expr as E
 
 type Parser a = Parsec String () a
 
-data Pattern = PVar String | PTuple [Pattern]
-               deriving (Show, Eq)
-
 data Expr = Unit
             | Num Integer
             | Var String
@@ -18,8 +15,8 @@ data Expr = Unit
             | BinaryOp Expr String Expr
             | Tuple [Expr]
             | App Expr Expr
-            | Let Pattern Expr Expr
-            | Lambda Pattern Expr
+            | Let [String] Expr Expr
+            | Lambda [String] Expr
             deriving (Show, Eq)
 
 reservedNames :: [String]
@@ -84,15 +81,15 @@ term = do
     args <- many atom
     return $ foldl App f args
 
-pattern :: Parser Pattern
+pattern :: Parser [String]
 pattern = tuplePattern <|> simplePattern
   where
-    simplePattern = PVar <$> identifier
+    simplePattern = do
+        id <- identifier
+        return [id]
     tuplePattern = do
-        ps <- between (symbol "(") (symbol ")") (pattern `sepBy1` symbol ",")
-        case ps of
-            [p] -> return p
-            ps' -> return $ PTuple ps'
+        ps <- between (symbol "(") (symbol ")") (identifier `sepBy1` symbol ",")
+        return ps
 
 letExpr :: Parser Expr
 letExpr = do
