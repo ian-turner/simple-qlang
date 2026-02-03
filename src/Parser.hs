@@ -109,19 +109,23 @@ ifElseExpr = do
     falseExp <- expr
     return $ IfExp eBool trueExp falseExp
 
+table = [[binary "->" E.AssocRight]]
+  where
+    binary name assoc =
+        (E.Infix (mkBinOp name <$ symbol name) assoc)
+    mkBinOp nm a b = Arrow a b
+
 arrowExpr :: Parser Exp
-arrowExpr = do
-    (e:es) <- expr `sepBy1` (symbol "->")
-    return $ foldr Arrow e es
+arrowExpr = E.buildExpressionParser table term
 
 expr :: Parser Exp
-expr = lamExpr <|> letExpr <|> ifElseExpr <|> term
+expr = lamExpr <|> arrowExpr <|> letExpr <|> ifElseExpr <|> term
 
 typeDecl :: Parser Decl
 typeDecl = do
     id <- identifier
     symbol ":"
-    t <- arrowExpr <|> expr
+    t <- expr
     return $ TypeDecl id t
 
 varOrFunDecl :: Parser Decl
