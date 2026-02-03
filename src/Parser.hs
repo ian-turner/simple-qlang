@@ -111,10 +111,8 @@ ifElseExpr = do
 
 arrowExpr :: Parser Exp
 arrowExpr = do
-    e1 <- expr
-    symbol "->"
-    e2 <- expr
-    return $ Arrow e1 e2
+    (e:es) <- expr `sepBy1` (symbol "->")
+    return $ foldr Arrow e es
 
 expr :: Parser Exp
 expr = lamExpr <|> letExpr <|> ifElseExpr <|> term
@@ -123,10 +121,8 @@ typeDecl :: Parser Decl
 typeDecl = do
     id <- identifier
     symbol ":"
-    ts <- expr `sepBy1` (symbol "->")
-    case ts of
-        [t] -> return $ TypeDecl id t
-        (t:ts) ->  return $ TypeDecl id (foldr Arrow t ts)
+    t <- arrowExpr <|> expr
+    return $ TypeDecl id t
 
 varOrFunDecl :: Parser Decl
 varOrFunDecl = do
