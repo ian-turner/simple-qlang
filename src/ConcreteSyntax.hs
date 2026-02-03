@@ -1,16 +1,19 @@
 module ConcreteSyntax where
 
 
-data Expr = Unit
-            | Num Integer
-            | Var String
-            | Tuple [Expr]
-            | App Expr Expr
-            | Let [String] Expr Expr
-            | Lambda [String] Expr
-            | IfExpr Expr Expr Expr
-            deriving (Show, Eq)
+data Exp
+  = Unit
+  | Num Integer
+  | Var String
+  | Tuple [Exp]
+  | App Exp Exp
+  | Let String Exp Exp
+  | LetTuple [String] Exp Exp
+  | Lam [String] Exp
+  | IfExp Exp Exp Exp
+  deriving (Show, Eq)
 
-data Decl = VarDecl String Expr
-            | FunDecl String [String] Expr
-            deriving (Show, Eq)
+data Decl
+  = VarDecl String Exp
+  | FunDecl String [String] Exp
+  deriving (Show, Eq)

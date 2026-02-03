@@ -64,6 +64,8 @@ executable funq
     other-modules:
         Parser
         ConcreteSyntax
+        Syntax
+        Utils
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -73,6 +75,9 @@ executable funq
                       , mtl
                       , containers
                       , parsec
+                      , nominal
+                      , pretty
+                      , syb
 
     -- Directories containing source files.
     hs-source-dirs:   src

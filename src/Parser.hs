@@ -44,13 +44,13 @@ reserved w = lexeme . try $ do
 symbol :: String -> Parser String
 symbol s = lexeme $ string s
 
-num :: Parser Expr
+num :: Parser Exp
 num = Num <$> integer
 
-var :: Parser Expr
+var :: Parser Exp
 var = Var <$> identifier
 
-unitParensOrTuple :: Parser Expr
+unitParensOrTuple :: Parser Exp
 unitParensOrTuple = unitPattern <|> (between (symbol "(") (symbol ")") inner)
   where
     unitPattern = do
@@ -62,10 +62,10 @@ unitParensOrTuple = unitPattern <|> (between (symbol "(") (symbol ")") inner)
             [e] -> return e
             ps  -> return $ Tuple ps
 
-atom :: Parser Expr
+atom :: Parser Exp
 atom = var <|> num <|> unitParensOrTuple
 
-term :: Parser Expr
+term :: Parser Exp
 term = do
     f    <- atom
     args <- many atom
@@ -81,36 +81,39 @@ pattern = tuplePattern <|> simplePattern
         ps <- between (symbol "(") (symbol ")") (identifier `sepBy1` symbol ",")
         return ps
 
-letExpr :: Parser Expr
-letExpr = do
+letExp :: Parser Exp
+letExp = do
     reserved "let"
     p <- pattern
     symbol "="
     e1 <- expr
     reserved "in"
     e2 <- expr
-    return $ Let p e1 e2
+    case p of
+        [id] -> return $ Let id e1 e2
+        vs -> return $ LetTuple vs e1 e2
 
-lamExpr :: Parser Expr
-lamExpr = do
+
+lamExp :: Parser Exp
+lamExp = do
     reserved "\\"
     p <- pattern
     symbol "->"
     e <- expr
-    return $ Lambda p e
+    return $ Lam p e
 
-ifElseExpr :: Parser Expr
-ifElseExpr = do
+ifElseExp :: Parser Exp
+ifElseExp = do
     reserved "if"
     eBool <- expr
     reserved "then"
     trueExp <- expr
     reserved "else"
     falseExp <- expr
-    return $ IfExpr eBool trueExp falseExp
+    return $ IfExp eBool trueExp falseExp
     
-expr :: Parser Expr
-expr = lamExpr <|> letExpr <|> ifElseExpr <|> term
+expr :: Parser Exp
+expr = lamExp <|> letExp <|> ifElseExp <|> term
 
 varOrFunDecl :: Parser Decl
 varOrFunDecl = do
