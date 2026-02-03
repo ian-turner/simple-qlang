@@ -138,7 +138,7 @@ varOrFunDecl = do
         (funId : vars) -> return $ FunDecl funId vars e
 
 decls :: Parser Decl
-decls = typeDecl <|> varOrFunDecl
+decls = varOrFunDecl <|> typeDecl
 
 parseWithEof :: Parser a -> String -> Either ParseError a
 parseWithEof p = parse (p <* eof) ""
