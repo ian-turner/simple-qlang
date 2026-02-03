@@ -1,2 +1,2 @@
-bell00 u = let (x, y) = (init (), init ()) in (cnot (hgate x, y))
-main = (\ u -> (let (x, y) = (bell00 ()) in (meas x, meas y)))
+bell00 x = let (a, b) = (init (), init ()) in (cnot (hgate a) b)
+output = let (a, b) = bell00 () in (meas a, meas b)
