@@ -10,7 +10,7 @@ import ConcreteSyntax
 type Parser a = Parsec String () a
 
 reservedNames :: [String]
-reservedNames = ["let", "in", "if", "then", "else", "->"]
+reservedNames = ["let", "in", "if", "then", "else"]
 
 whitespace :: Parser ()
 whitespace = void $ many $ oneOf " \n\t"
@@ -112,7 +112,7 @@ ifElseExpr = do
 arrowExpr :: Parser Exp
 arrowExpr = do
     e1 <- expr
-    reserved "->"
+    symbol "->"
     e2 <- expr
     return $ Arrow e1 e2
 
