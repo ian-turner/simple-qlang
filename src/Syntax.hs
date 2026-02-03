@@ -21,9 +21,8 @@ import Utils
 data Exp
   = Num Integer
   | Var Variable
-  | Tuple Exp Exp
+  | Tuple [Exp]
   | App Exp Exp
   | Lam (Bind [Variable] Exp)
-  | Let (Bind Variable Exp)
-  | LetTuple (Bind [Variable] Exp)
+  | Let (Bind [Variable] Exp)
   deriving (Eq, Generic, Nominal, NominalShow, NominalSupport, Show)

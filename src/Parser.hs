@@ -89,9 +89,7 @@ letExp = do
     e1 <- expr
     reserved "in"
     e2 <- expr
-    case p of
-        [id] -> return $ Let id e1 e2
-        vs -> return $ LetTuple vs e1 e2
+    return $ Let p e1 e2
 
 
 lamExp :: Parser Exp

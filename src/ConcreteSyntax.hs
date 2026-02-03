@@ -7,8 +7,7 @@ data Exp
   | Var String
   | Tuple [Exp]
   | App Exp Exp
-  | Let String Exp Exp
-  | LetTuple [String] Exp Exp
+  | Let [String] Exp Exp
   | Lam [String] Exp
   | IfExp Exp Exp Exp
   deriving (Show, Eq)
