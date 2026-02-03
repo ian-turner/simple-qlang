@@ -19,10 +19,12 @@ import Utils
 
 
 data Exp
-  = Num Integer
+  = Unit
+  | Num Integer
   | Var Variable
   | Tuple [Exp]
   | App Exp Exp
   | Lam (Bind [Variable] Exp)
   | Let (Bind [Variable] Exp)
+  | IfExp Exp Exp Exp
   deriving (Eq, Generic, Nominal, NominalShow, NominalSupport, Show)

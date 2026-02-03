@@ -4,7 +4,6 @@ module ConcreteSyntax where
 data Exp
   = Unit                                -- Unit type and value
   | Num Integer                         -- Number constants
-  | Base String                         -- Base types (begin with uppercase)
   | Var String                          -- Variable identifiers
   | Tuple [Exp]                         -- Tuple of objects (any size)
   | App Exp Exp                         -- Function application
