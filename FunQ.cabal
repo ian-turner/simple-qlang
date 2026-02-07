@@ -75,6 +75,7 @@ executable funq
                       , mtl
                       , containers
                       , parsec
+                      , indents
                       , nominal
                       , pretty
                       , syb

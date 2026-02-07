@@ -1,140 +1,126 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Parser where
 
-import Text.Parsec
 import Control.Monad
+import Control.Monad.Identity
+import Text.Parsec.Indent
+import Text.Parsec.Language
+import Text.Parsec hiding (Empty, ParseError, State)
+import qualified Data.IntMap as IM
+import qualified Text.Parsec as P
+import qualified Text.Parsec.Token as Token
 import qualified Text.Parsec.Expr as E
 
 import ConcreteSyntax
 
 
-type Parser a = Parsec String () a
+type Parser a = IndentParser String ParserState a
 
-reservedNames :: [String]
-reservedNames = ["let", "in", "if", "then", "else", "=", ":"]
+data ParserState = 
+  ParserState
+    { expOpTable :: IM.IntMap [E.Operator String ParserState (IndentT Identity) Exp]
+    }
 
-whitespace :: Parser ()
-whitespace = void $ many $ oneOf " \n\t"
+initialParserState :: ParserState
+initialParserState =
+  ParserState
+    { expOpTable = IM.fromAscList (zip [0 ..] initialOpTable)
+    }
 
-lexeme :: Parser a -> Parser a
-lexeme p = do
-    x <- p
-    whitespace
-    return x
+initialOpTable :: [[E.Operator String ParserState (IndentT Identity) Exp]]
+initialOpTable = [ [] ]
 
-integer :: Parser Integer
-integer = read <$> lexeme (many1 digit)
+parseModule :: String -> String -> ParserState
+               -> Either P.ParseError ([Decl], ParserState)
+parseModule srcName cnts st = runIndent $ runParserT decls st srcName cnts
 
-identifier :: Parser String
-identifier = lexeme (try (p >>= check))
-  where
-    p = (:) <$> firstChar <*> many nonFirstChar
-    firstChar = letter <|> char '_'
-    nonFirstChar = digit <|> firstChar
+decls :: Parser ([Decl], ParserState)
+decls = do
+    bs <- block funDef
+    st <- getState
+    return (bs, st)
 
-    check x
-      | x `elem` reservedNames =
-        unexpected ("reserved word " ++ show x)
-      | otherwise = return x
+funDef :: Parser Decl
+funDef = do
+  f <- var
+  args <- many var
+  reservedOp "="
+  return $ FunDef f args Unit
 
-reserved :: String -> Parser ()
-reserved w = lexeme . try $ do
-    string w
-    notFollowedBy (alphaNum <|> char '_')
+var :: Parser String
+var = do
+  name <- identifier
+  return name
 
-symbol :: String -> Parser String
-symbol s = lexeme $ string s
+-- | Language token definition
+langStyle :: (Stream s m Char, Monad m) => Token.GenLanguageDef s u m
+langStyle =
+  Token.LanguageDef
+    { Token.commentStart = "{-"
+    , Token.commentEnd = "-}"
+    , Token.commentLine = "--"
+    , Token.nestedComments = True
+    , Token.identStart = letter
+    , Token.identLetter = alphaNum <|> oneOf "_'"
+    , Token.opStart = oneOf "!&*+/"
+    , Token.opLetter = oneOf "!&*+/"
+    , Token.caseSensitive = True
+    , Token.reservedNames = 
+      [ "in"
+      , "let"
+      , "if"
+      , "then"
+      , "else"
+      ]
+    , Token.reservedOpNames =
+        [ "\\"
+        ]
+    }
 
-num :: Parser Exp
-num = Num <$> integer
+-- | Parse a token
+tokenizer :: (Stream s m Char, Monad m) => Token.GenTokenParser s u m
+tokenizer = Token.makeTokenParser langStyle
 
-var :: Parser Exp
-var = Var <$> identifier
+-- | Parse a literal
+stringLiteral :: (Stream s m Char, Monad m) => ParsecT s u m String
+stringLiteral = Token.stringLiteral tokenizer
 
-unitParensOrTuple :: Parser Exp
-unitParensOrTuple = unitPattern <|> (between (symbol "(") (symbol ")") inner)
-  where
-    unitPattern = do
-        reserved "()"
-        return Unit
-    inner = do
-        es <- expr `sepBy1` symbol ","
-        case es of
-            [e] -> return e
-            ps  -> return $ Tuple ps
+-- | Parse an legal identifier
+identifier :: (Stream s m Char, Monad m) => ParsecT s u m String
+identifier = Token.identifier tokenizer
 
-atom :: Parser Exp
-atom = var <|> num <|> unitParensOrTuple
+-- | Parse many white spaces
+whiteSpace :: (Stream s m Char, Monad m) => ParsecT s u m ()
+whiteSpace = Token.whiteSpace tokenizer
 
-term :: Parser Exp
-term = do
-    f    <- atom
-    args <- many atom
-    return $ foldl App f args
+-- | Parse a reserved word
+reserved :: (Stream s m Char, Monad m) => String -> ParsecT s u m ()
+reserved = Token.reserved tokenizer
 
-pattern :: Parser [String]
-pattern = tuplePattern <|> simplePattern
-  where
-    simplePattern = do
-        id <- identifier
-        return [id]
-    tuplePattern = do
-        ps <- between (symbol "(") (symbol ")") (identifier `sepBy1` symbol ",")
-        return ps
+-- | Parse a reserved operator
+reservedOp :: (Stream s m Char, Monad m) => String -> ParsecT s u m ()
+reservedOp = Token.reservedOp tokenizer
 
-letExpr :: Parser Exp
-letExpr = do
-    reserved "let"
-    p <- pattern
-    symbol "="
-    e1 <- expr
-    reserved "in"
-    e2 <- expr
-    return $ Let p e1 e2
+-- | Parse an integer
+integer :: (Stream s m Char, Monad m) => ParsecT s u m Integer
+integer = Token.integer tokenizer
 
-lamExpr :: Parser Exp
-lamExpr = do
-    reserved "\\"
-    p <- pattern
-    symbol "->"
-    e <- expr
-    return $ Lam p e
+-- | Parse an natural number
+naturals :: (Stream s m Char, Monad m) => ParsecT s u m Integer
+naturals = Token.natural tokenizer
 
-ifElseExpr :: Parser Exp
-ifElseExpr = do
-    reserved "if"
-    eBool <- expr
-    reserved "then"
-    trueExp <- expr
-    reserved "else"
-    falseExp <- expr
-    return $ IfExp eBool trueExp falseExp
+-- | Parse an operator
+operator :: (Stream s m Char, Monad m) => ParsecT s u m String
+operator = Token.operator tokenizer
 
-expr :: Parser Exp
-expr = lamExpr <|> letExpr <|> ifElseExpr <|> term
+-- | Parse a pair of parenthesis
+parens :: (Stream s m Char, Monad m) => ParsecT s u m a -> ParsecT s u m a
+parens = Token.parens tokenizer
 
-varDecl :: Parser Decl
-varDecl = do
-    id <- identifier
-    reserved "="
-    e <- expr
-    return $ VarDecl id e
+-- | Parse a comma
+comma :: (Stream s m Char, Monad m) => ParsecT s u m String
+comma = Token.comma tokenizer
 
-funDecl :: Parser Decl
-funDecl = do
-    (funId : vars) <- many identifier
-    reserved "="
-    e <- expr
-    return $ FunDecl funId vars e
-
-decl :: Parser Decl
-decl = try varDecl <|> funDecl
-
-parseWithEof :: Parser a -> String -> Either ParseError a
-parseWithEof p = parse (p <* eof) ""
-
-parseWithWhitespace :: Parser a -> String -> Either ParseError a
-parseWithWhitespace p = parseWithEof wrapper
-  where
-    wrapper = do
-        whitespace
-        p
+lexeme :: (Stream s m Char, Monad m) => ParsecT s u m a -> ParsecT s u m a
+lexeme = Token.lexeme tokenizer
