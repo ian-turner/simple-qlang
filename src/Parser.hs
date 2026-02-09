@@ -58,7 +58,13 @@ term :: Parser Exp
 term = getState >>= \st -> expParser st
 
 atomExp :: Parser Exp
-atomExp = unit <|> try letExp <|> try tupleExp <|> appExp <|> varExp
+atomExp =
+  unit
+  <|> try letExp
+  <|> try tupleExp
+  <|> try ifExp
+  <|> appExp
+  <|> varExp
 
 unit :: Parser Exp
 unit = reservedOp "()" >> return Unit
@@ -101,6 +107,16 @@ letExp = do
       reservedOp "="
       d <- term
       return $ BTuple ns d
+
+ifExp :: Parser Exp
+ifExp = do
+  reserved "if"
+  b <- term
+  reserved "then"
+  t1 <- term
+  reserved "else"
+  t2 <- term
+  return $ IfExp b t1 t2
 
 varExp :: Parser Exp
 varExp = (var >>= \x -> return $ Var x)
