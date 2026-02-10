@@ -70,10 +70,11 @@ unit :: Parser Exp
 unit = reservedOp "()" >> return Unit
 
 appExp :: Parser Exp
-appExp = do
-  head <- headExp
-  as <- many arg
-  return $ foldl (\z x -> App z x) head as
+appExp =
+  manyLines
+      (do head <- headExp
+          return $ foldl (\z x -> App z x) head)
+  arg
   where
     headExp =
       varExp
@@ -96,7 +97,7 @@ letExp = do
   t <- term
   return $ Let bs t
   where
-    bind = tuple <|> single
+    bind = try tuple <|> single
     single = do
       n <- try var
       reservedOp "="
@@ -127,7 +128,7 @@ var = do
   return name
 
 manyLines :: Parser ([a] -> b) -> Parser a -> Parser b
-manyLines h p = h <*/> p
+manyLines h p = withPos $ h <*/> p
 
 -- | Language token definition
 langStyle :: (Stream s m Char, Monad m) => Token.GenLanguageDef s u m
