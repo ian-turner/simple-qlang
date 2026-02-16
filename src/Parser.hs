@@ -40,19 +40,29 @@ parseModule :: String -> String -> ParserState
                -> Either P.ParseError ([Decl], ParserState)
 parseModule srcName cnts st = runIndent $ runParserT decls st srcName cnts
 
+decl :: Parser Decl
+decl = try varDef <|> funDef
+
 decls :: Parser ([Decl], ParserState)
 decls = do
-    bs <- block funDef
+    bs <- block decl
     st <- getState
     return (bs, st)
 
 funDef :: Parser Decl
 funDef = do
   f <- var
-  args <- many var
+  args <- many1 var
   reservedOp "="
   def <- term
   return $ FunDef f args def
+
+varDef :: Parser Decl
+varDef = do
+  name <- var
+  reservedOp "="
+  def <- term
+  return $ VarDef name def
 
 term :: Parser Exp
 term = getState >>= \st -> expParser st
@@ -60,6 +70,7 @@ term = getState >>= \st -> expParser st
 atomExp :: Parser Exp
 atomExp =
   unit
+  <|> try lamExp
   <|> try letExp
   <|> try tupleExp
   <|> try ifExp
@@ -119,6 +130,14 @@ ifExp = do
   t2 <- term
   return $ IfExp b t1 t2
 
+lamExp :: Parser Exp
+lamExp = do
+  reservedOp "\\"
+  args <- many1 var
+  reservedOp "->"
+  e <- term
+  return $ Lam args e
+
 varExp :: Parser Exp
 varExp = (var >>= \x -> return $ Var x)
 
@@ -154,6 +173,7 @@ langStyle =
         [ "\\"
         , "="
         , "()"
+        , "->"
         ]
     }
 
