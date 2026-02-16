@@ -66,6 +66,8 @@ executable funq
         ConcreteSyntax
         Syntax
         Utils
+        Resolve
+        TopMonad
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
@@ -79,6 +81,7 @@ executable funq
                       , nominal
                       , pretty
                       , syb
+                      , exceptions
 
     -- Directories containing source files.
     hs-source-dirs:   src

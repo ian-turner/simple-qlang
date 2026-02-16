@@ -22,7 +22,8 @@ data Scope = Scope {
 -- | The empty scope
 emptyScope :: Scope
 emptyScope = Scope {
-  scopeMap = Map.empty
+--  scopeMap = Map.empty
+  scopeMap = Map.fromList [("init", A.Unit)] 
   }
 
 -- | Loop up a variable from a global scope using its name
