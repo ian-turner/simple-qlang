@@ -54,6 +54,13 @@ addLScope lscope x v =
       lscope' = lscope {localScope = local'}
   in lscope'
 
+-- | Extend the local scope with a list of variables
+lscopeVars :: LScope -> [String] -> (LScope -> [Variable] -> a) -> a
+lscopeVars lscope ss body =
+  freshNames ss $ \ as ->
+    let lscope' = foldr (\ (s , a) l -> addLScope l s a) lscope (zip ss as)
+    in body lscope' as
+
 -- | Lookup a string from local and global scope
 lookupLScope :: LScope -> String -> Maybe A.Exp
 lookupLScope lscope x =
@@ -87,6 +94,13 @@ resolve scope (C.Var v) =
     Nothing -> throwError $ NotInScope v
     Just x  -> return x
 
+resolve scope (C.App x y) = do
+  m <- resolve scope x
+  n <- resolve scope y
+  return $ A.App m n
+
+resolve scope C.Unit = return A.Unit
+
 -- | Add a constant to the scope
 addConst :: String -> A.Exp -> Scope -> Resolve Scope
 addConst x exp scope =
@@ -105,3 +119,4 @@ resolveDecl scope (C.VarDef name exp) = do
   exp' <- resolve lscope exp
   scope' <- addConst name exp' scope
   return (A.VarDef name exp', scope')
+

@@ -28,3 +28,12 @@ instance NominalShow (NoBind String) where
 
 instance Eq Variable where
   (Variable x _) == (Variable y _) = x == y
+
+freshNames :: [String] -> ([Variable] -> t) -> t
+freshNames [] body = body []
+freshNames (n:ns) body =
+  freshName n $ \ a ->
+  freshNames ns $ \ as ->
+  body (a:as)
+  where freshName s k =
+          with_fresh $ \a -> k (Variable a (NoBind s))
