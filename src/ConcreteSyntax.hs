@@ -8,6 +8,8 @@ data LetBinding
 
 data Exp
   = Unit                                -- Unit type and value
+  | NumInt Int                          -- Numbers
+  | NumFloat Float
   | Var String                          -- Variable identifiers
   | Tuple [Exp]                         -- Tuple of objects (any size)
   | App Exp Exp                         -- Function application

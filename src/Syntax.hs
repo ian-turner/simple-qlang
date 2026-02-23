@@ -20,7 +20,8 @@ import Utils
 
 data Exp
   = Unit
-  | Num Integer
+  | NumInt Int
+  | NumFloat Float
   | Var Variable
   | Const String
   | Tuple [Exp]

@@ -131,6 +131,10 @@ resolve scope (C.IfExp b t f) = do
   f' <- resolve scope f
   return (A.IfExp b' t' f')
 
+resolve scope (C.NumInt n) = return (A.NumInt n)
+
+resolve scope (C.NumFloat x) = return (A.NumFloat x)
+
 -- | Add a constant to the scope
 addConst :: String -> (String -> A.Exp) -> Scope -> Resolve Scope
 addConst x f scope =

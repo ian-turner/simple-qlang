@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Parser where
 
@@ -74,11 +75,33 @@ atomExp =
   <|> try letExp
   <|> try tupleExp
   <|> try ifExp
+  <|> try num
   <|> appExp
   <|> varExp
 
 unit :: Parser Exp
 unit = reservedOp "()" >> return Unit
+
+num :: Parser Exp
+num = try numFloat <|> numInt
+--  n <- naturals
+--  r <- option Nothing $ do {  reservedOp ".";
+--                              d <- lexeme (many1 digit);
+--                              return $ Just d
+--                              }
+--  case r of
+--    Nothing -> return $ Left n
+--    Just _ ->
+  where
+    numInt = do
+      d <- lexeme (many1 digit)
+      return $ NumInt (read d)
+    numFloat = do
+      l <- lexeme (many1 digit)
+      reservedOp "."
+      r <- lexeme (many1 digit)
+      let numStr = l ++ "." ++ r
+      return $ NumFloat (read numStr)
 
 appExp :: Parser Exp
 appExp =
