@@ -3,10 +3,10 @@
 
 module Parser where
 
-import Control.Monad
+import Control.Monad()
 import Control.Monad.Identity
 import Text.Parsec.Indent
-import Text.Parsec.Language
+import Text.Parsec.Language()
 import Text.Parsec hiding (Empty, ParseError, State)
 import qualified Data.IntMap as IM
 import qualified Text.Parsec as P
@@ -84,14 +84,6 @@ unit = reservedOp "()" >> return Unit
 
 num :: Parser Exp
 num = try numFloat <|> numInt
---  n <- naturals
---  r <- option Nothing $ do {  reservedOp ".";
---                              d <- lexeme (many1 digit);
---                              return $ Just d
---                              }
---  case r of
---    Nothing -> return $ Left n
---    Just _ ->
   where
     numInt = do
       d <- lexeme (many1 digit)
@@ -106,8 +98,8 @@ num = try numFloat <|> numInt
 appExp :: Parser Exp
 appExp =
   manyLines
-      (do head <- headExp
-          return $ foldl (\z x -> App z x) head)
+      (do headE <- headExp
+          return $ foldl (\z x -> App z x) headE)
   arg
   where
     headExp =
