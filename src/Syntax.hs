@@ -31,6 +31,5 @@ data Exp
   deriving (Eq, Generic, Nominal, NominalShow, NominalSupport, Show)
 
 data Decl
-  = VarDef String Exp
-  | FunDef String [String] Exp
+  = Def String Exp
   deriving (Show, Eq)

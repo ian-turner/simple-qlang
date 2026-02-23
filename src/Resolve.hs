@@ -120,4 +120,11 @@ resolveDecl scope (C.VarDef name exp) = do
   let lscope = toLScope scope
   exp' <- resolve lscope exp
   scope' <- addConst name A.Const scope
-  return (A.VarDef name exp', scope')
+  return (A.Def name exp', scope')
+
+resolveDecl scope (C.FunDef name args def) = do
+  scope' <- addConst name A.Const scope
+  let lscope = toLScope scope
+  lscopeVars lscope args $ \ d xs ->
+    do def' <- resolve d def
+       return (A.Def name (A.Lam ( abst xs def')), scope')
