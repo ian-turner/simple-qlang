@@ -25,6 +25,8 @@ emptyScope = Scope {
 --  scopeMap = Map.empty
   scopeMap = Map.fromList [ ("init", A.Const "init")
                           , ("hgate", A.Const "hgate")
+                          , ("xgate", A.Const "hgate")
+                          , ("zgate", A.Const "hgate")
                           , ("cnot", A.Const "cnot")
                           , ("meas", A.Const "meas")
                           ] 
@@ -123,6 +125,12 @@ resolve scope (C.Tuple xs) = do
   xs' <- mapM (resolve scope) xs
   return (A.Tuple xs')
 
+resolve scope (C.IfExp b t f) = do
+  b' <- resolve scope b
+  t' <- resolve scope t
+  f' <- resolve scope f
+  return (A.IfExp b' t' f')
+
 -- | Add a constant to the scope
 addConst :: String -> (String -> A.Exp) -> Scope -> Resolve Scope
 addConst x f scope =
@@ -147,4 +155,4 @@ resolveDecl scope (C.FunDef name args def) = do
   let lscope = toLScope scope
   lscopeVars lscope args $ \ d xs ->
     do def' <- resolve d def
-       return (A.Def name (A.Lam ( abst xs def')), scope')
+       return (A.Def name (A.Lam (xs :. def')), scope')

@@ -1,3 +1,15 @@
+ctrlX phi x =
+    if x then
+        xgate phi
+    else
+        phi
+
+ctrlZ phi x =
+    if x then
+        zgate phi
+    else
+        phi
+
 bell00 x =
     let a = init ()
         b = init ()
@@ -7,8 +19,8 @@ tele phi =
     let (a, b) = bell00 ()
         (phi, a) = cnot phi a
         phi = hgate phi
-        b = c_x a b
-        b = c_z phi b
+        b = ctrlX a b
+        b = ctrlZ phi b
     in b
 
 output =
