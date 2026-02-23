@@ -1,8 +1,8 @@
 module ConcreteSyntax where
 
 
-data LetBinding =
-  BSingle String Exp
+data LetBinding
+  = BSingle String Exp
   | BTuple [String] Exp
   deriving (Show, Eq)
 

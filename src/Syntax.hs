@@ -26,7 +26,8 @@ data Exp
   | Tuple [Exp]
   | App Exp Exp
   | Lam (Bind [Variable] Exp)
-  | Let (Bind [Variable] Exp)
+  | Let Exp (Bind Variable Exp)
+  | LetTuple Exp (Bind [Variable] Exp)
   | IfExp Exp Exp Exp
   deriving (Eq, Generic, Nominal, NominalShow, NominalSupport, Show)
 

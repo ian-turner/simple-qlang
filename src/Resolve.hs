@@ -24,7 +24,9 @@ emptyScope :: Scope
 emptyScope = Scope {
 --  scopeMap = Map.empty
   scopeMap = Map.fromList [ ("init", A.Const "init")
-                          , ("H", A.Const "H")
+                          , ("hgate", A.Const "hgate")
+                          , ("cnot", A.Const "cnot")
+                          , ("meas", A.Const "meas")
                           ] 
   }
 
@@ -102,6 +104,24 @@ resolve scope (C.App x y) = do
   return $ A.App m n
 
 resolve scope C.Unit = return A.Unit
+
+resolve scope (C.Let [] m) = resolve scope m
+
+resolve scope (C.Let ((C.BSingle s n):defs) m) =
+  lscopeVars scope [s] $ \ scope' (x:[]) -> do
+    n' <- resolve scope n
+    m' <- resolve scope' (C.Let defs m)
+    return (A.Let n' (x :. m'))
+
+resolve scope (C.Let ((C.BTuple vars n):defs) m) =
+  lscopeVars scope vars $ \ scope' xs -> do
+    n' <- resolve scope n
+    m' <- resolve scope' (C.Let defs m)
+    return (A.LetTuple n' (xs :. m'))
+
+resolve scope (C.Tuple xs) = do
+  xs' <- mapM (resolve scope) xs
+  return (A.Tuple xs')
 
 -- | Add a constant to the scope
 addConst :: String -> (String -> A.Exp) -> Scope -> Resolve Scope
