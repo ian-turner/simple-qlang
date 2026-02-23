@@ -22,6 +22,7 @@ data Exp
   = Unit
   | Num Integer
   | Var Variable
+  | Const String
   | Tuple [Exp]
   | App Exp Exp
   | Lam (Bind [Variable] Exp)

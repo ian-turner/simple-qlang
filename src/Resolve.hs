@@ -23,7 +23,9 @@ data Scope = Scope {
 emptyScope :: Scope
 emptyScope = Scope {
 --  scopeMap = Map.empty
-  scopeMap = Map.fromList [("init", A.Unit)] 
+  scopeMap = Map.fromList [ ("init", A.Const "init")
+                          , ("H", A.Const "H")
+                          ] 
   }
 
 -- | Loop up a variable from a global scope using its name
@@ -80,11 +82,11 @@ data ScopeError
   deriving (Show, Eq)
 
 -- | Monad for scope resolution
-type Resolve a = ExceptT ScopeError (StateT Int Identity) a
+type Resolve a = ExceptT ScopeError (StateT () Identity) a
 
 -- | A run function for resolving a single exp/decl
 runResolve :: Resolve a -> Either ScopeError a
-runResolve m = runIdentity $ evalStateT (runExceptT m) 0
+runResolve m = runIdentity $ evalStateT (runExceptT m) ()
 
 -- | Function for resolving a concrete syntax
 -- | expression to an abstract syntax expression
@@ -102,12 +104,12 @@ resolve scope (C.App x y) = do
 resolve scope C.Unit = return A.Unit
 
 -- | Add a constant to the scope
-addConst :: String -> A.Exp -> Scope -> Resolve Scope
-addConst x exp scope =
+addConst :: String -> (String -> A.Exp) -> Scope -> Resolve Scope
+addConst x f scope =
   case lookupScope scope x of
     Just x' -> throwError $ MultiDef x
     Nothing ->
-        let newMap = Map.insert x exp $ scopeMap scope
+        let newMap = Map.insert x (f x) $ scopeMap scope
             scope' = scope { scopeMap = newMap }
         in (return scope')
 
@@ -117,6 +119,5 @@ resolveDecl :: Scope -> C.Decl -> Resolve (A.Decl, Scope)
 resolveDecl scope (C.VarDef name exp) = do
   let lscope = toLScope scope
   exp' <- resolve lscope exp
-  scope' <- addConst name exp' scope
+  scope' <- addConst name A.Const scope
   return (A.VarDef name exp', scope')
-
