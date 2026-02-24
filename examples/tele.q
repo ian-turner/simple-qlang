@@ -1,11 +1,11 @@
-ctrlX phi x =
-  if x then
+ctrlX x phi =
+  if (meas x) then
     xgate phi
   else
     phi
 
-ctrlZ phi x =
-  if x then
+ctrlZ x phi =
+  if (meas x) then
     zgate phi
   else
     phi
@@ -21,8 +21,8 @@ tele phi =
     (a, b) = bell00 ()
     (phi, a) = cnot phi a
     phi = hgate phi
-    b = ctrlX a b
-    b = ctrlZ phi b
+    b = ctrlX b a
+    b = ctrlZ b phi
   in b
 
 output =

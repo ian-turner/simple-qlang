@@ -141,9 +141,9 @@ addConst x f scope =
   case lookupScope scope x of
     Just x' -> throwError $ MultiDef x
     Nothing ->
-        let newMap = Map.insert x (f x) $ scopeMap scope
-            scope' = scope { scopeMap = newMap }
-        in (return scope')
+      let newMap = Map.insert x (f x) $ scopeMap scope
+          scope' = scope { scopeMap = newMap }
+      in (return scope')
 
 -- | Function for resolving a concrete syntax
 -- | declaration to an abstract syntax declaration
