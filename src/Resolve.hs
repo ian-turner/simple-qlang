@@ -23,12 +23,12 @@ data Scope = Scope {
 emptyScope :: Scope
 emptyScope = Scope {
 --  scopeMap = Map.empty
-  scopeMap = Map.fromList [ ("init", A.Const "init")
-                          , ("hgate", A.Const "hgate")
-                          , ("xgate", A.Const "hgate")
-                          , ("zgate", A.Const "hgate")
-                          , ("cnot", A.Const "cnot")
-                          , ("meas", A.Const "meas")
+  scopeMap = Map.fromList [ ("init", A.Base "init")
+                          , ("hgate", A.Base "hgate")
+                          , ("xgate", A.Base "hgate")
+                          , ("zgate", A.Base "hgate")
+                          , ("cnot", A.Base "cnot")
+                          , ("meas", A.Base "meas")
                           ] 
   }
 

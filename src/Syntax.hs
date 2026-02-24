@@ -19,18 +19,20 @@ import Utils
 
 
 data Exp
-  = Unit
-  | NumInt Int
+  = Unit                                      -- Unit type instance
+  | NumInt Int                                -- Numbers
   | NumFloat Float
-  | Var Variable
-  | Const String
-  | Tuple [Exp]
-  | App Exp Exp
-  | Lam (Bind [Variable] Exp)
-  | Let Exp (Bind Variable Exp)
+  | Var Variable                              -- Bound variables
+  | Const String                              -- Top-level defined constant
+  | Base String                               -- Compiler-defined constant
+  | Tuple [Exp]                               -- Tuple of objects (any size)
+  | App Exp Exp                               -- Function application
+  | Lam (Bind [Variable] Exp)                 -- Bound lambda expression
+  | Let Exp (Bind Variable Exp)               -- Bound let expressions
   | LetTuple Exp (Bind [Variable] Exp)
-  | IfExp Exp Exp Exp
-  deriving (Eq, Generic, Nominal, NominalShow, NominalSupport, Show)
+  | IfExp Exp Exp Exp                         -- If/else branching
+  deriving (Eq, Generic, Nominal,
+    NominalShow, NominalSupport, Show)
 
 data Decl
   = Def String Exp

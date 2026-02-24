@@ -3,10 +3,10 @@
 
 module Parser where
 
-import Control.Monad()
+import Control.Monad
 import Control.Monad.Identity
 import Text.Parsec.Indent
-import Text.Parsec.Language()
+import Text.Parsec.Language
 import Text.Parsec hiding (Empty, ParseError, State)
 import qualified Data.IntMap as IM
 import qualified Text.Parsec as P
