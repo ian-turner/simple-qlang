@@ -1,11 +1,11 @@
 ctrlX x phi =
-  if (meas x) then
+  if (dynlift (meas x)) then
     xgate phi
   else
     phi
 
 ctrlZ x phi =
-  if (meas x) then
+  if (dynlift (meas x)) then
     zgate phi
   else
     phi
@@ -30,4 +30,4 @@ output =
     a = init ()
     a = hgate a
     a = tele a
-  in (meas a)
+  in (dynlift (meas a))

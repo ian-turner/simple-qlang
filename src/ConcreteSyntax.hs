@@ -16,6 +16,7 @@ data Exp
   | Let [LetBinding] Exp                -- Let expression
   | Lam [String] Exp                    -- Lambda expressions
   | IfExp Exp Exp Exp                   -- If/then/else expressions
+  | Dynlift                             -- Dynamic lifting function
   deriving (Show, Eq)
 
 data Decl

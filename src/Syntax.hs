@@ -31,6 +31,7 @@ data Exp
   | Let Exp (Bind Variable Exp)               -- Bound let expressions
   | LetTuple Exp (Bind [Variable] Exp)
   | IfExp Exp Exp Exp                         -- If/else branching
+  | Dynlift                                   -- Dynamic lifting
   deriving (Eq, Generic, Nominal,
     NominalShow, NominalSupport, Show)
 

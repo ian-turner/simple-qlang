@@ -6,5 +6,5 @@ bell00 x =
 
 output =
   let
-    (a, b) = (bell00 ())
-  in (meas a, meas b)
+    (a, b) = bell00 ()
+  in (dynlift (meas a), dynlift (meas b))

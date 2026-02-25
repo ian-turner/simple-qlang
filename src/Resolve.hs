@@ -100,40 +100,47 @@ resolve scope (C.Var v) =
     Nothing -> throwError $ NotInScope v
     Just x  -> return x
 
-resolve scope (C.App x y) = do
-  m <- resolve scope x
-  n <- resolve scope y
-  return $ A.App m n
+resolve scope (C.App x y) =
+  do m <- resolve scope x
+     n <- resolve scope y
+     return $ A.App m n
 
 resolve scope C.Unit = return A.Unit
 
 resolve scope (C.Let [] m) = resolve scope m
 
 resolve scope (C.Let ((C.BSingle s n):defs) m) =
-  lscopeVars scope [s] $ \ scope' (x:[]) -> do
-    n' <- resolve scope n
-    m' <- resolve scope' (C.Let defs m)
-    return (A.Let n' (x :. m'))
+  lscopeVars scope [s] $ \ scope' (x:[]) ->
+    do n' <- resolve scope n
+       m' <- resolve scope' (C.Let defs m)
+       return (A.Let n' (x :. m'))
 
 resolve scope (C.Let ((C.BTuple vars n):defs) m) =
-  lscopeVars scope vars $ \ scope' xs -> do
-    n' <- resolve scope n
-    m' <- resolve scope' (C.Let defs m)
-    return (A.LetTuple n' (xs :. m'))
+  lscopeVars scope vars $ \ scope' xs ->
+    do n' <- resolve scope n
+       m' <- resolve scope' (C.Let defs m)
+       return (A.LetTuple n' (xs :. m'))
 
-resolve scope (C.Tuple xs) = do
-  xs' <- mapM (resolve scope) xs
-  return (A.Tuple xs')
+resolve scope (C.Tuple xs) =
+  do xs' <- mapM (resolve scope) xs
+     return (A.Tuple xs')
 
-resolve scope (C.IfExp b t f) = do
-  b' <- resolve scope b
-  t' <- resolve scope t
-  f' <- resolve scope f
-  return (A.IfExp b' t' f')
+resolve scope (C.IfExp b t f) =
+  do b' <- resolve scope b
+     t' <- resolve scope t
+     f' <- resolve scope f
+     return (A.IfExp b' t' f')
 
 resolve scope (C.NumInt n) = return (A.NumInt n)
 
 resolve scope (C.NumFloat x) = return (A.NumFloat x)
+
+resolve scope C.Dynlift = return A.Dynlift
+
+resolve scope (C.Lam xs exp) =
+  do lscopeVars scope xs $ \ d xs' ->
+       do exp' <- resolve d exp
+          return (A.Lam (xs' :. exp'))
 
 -- | Add a constant to the scope
 addConst :: String -> (String -> A.Exp) -> Scope -> Resolve Scope
@@ -148,15 +155,15 @@ addConst x f scope =
 -- | Function for resolving a concrete syntax
 -- | declaration to an abstract syntax declaration
 resolveDecl :: Scope -> C.Decl -> Resolve (A.Decl, Scope)
-resolveDecl scope (C.VarDef name exp) = do
-  let lscope = toLScope scope
-  exp' <- resolve lscope exp
-  scope' <- addConst name A.Const scope
-  return (A.Def name exp', scope')
+resolveDecl scope (C.VarDef name exp) =
+  do scope' <- addConst name A.Const scope
+     let lscope = toLScope scope'
+     exp' <- resolve lscope exp
+     return (A.Def name exp', scope')
 
-resolveDecl scope (C.FunDef name args def) = do
-  scope' <- addConst name A.Const scope
-  let lscope = toLScope scope
-  lscopeVars lscope args $ \ d xs ->
-    do def' <- resolve d def
-       return (A.Def name (A.Lam (xs :. def')), scope')
+resolveDecl scope (C.FunDef name args def) =
+  do scope' <- addConst name A.Const scope
+     let lscope = toLScope scope'
+     lscopeVars lscope args $ \ d xs ->
+       do def' <- resolve d def
+          return (A.Def name (A.Lam (xs :. def')), scope')

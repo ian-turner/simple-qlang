@@ -103,9 +103,9 @@ appExp =
   arg
   where
     headExp =
-      varExp
+      dynliftExp <|> varExp
     arg =
-      try unit <|> varExp <|> tupleExp
+      try unit <|> dynliftExp <|> varExp <|> tupleExp
 
 tupleExp :: Parser Exp
 tupleExp = do
@@ -153,6 +153,9 @@ lamExp = do
   e <- term
   return $ Lam args e
 
+dynliftExp :: Parser Exp
+dynliftExp = reserved "dynlift" >> return Dynlift
+
 varExp :: Parser Exp
 varExp = (var >>= \x -> return $ Var x)
 
@@ -174,8 +177,8 @@ langStyle =
     , Token.nestedComments = True
     , Token.identStart = letter
     , Token.identLetter = alphaNum <|> oneOf "_'"
-    , Token.opStart = oneOf "!&*+/="
-    , Token.opLetter = oneOf "!&*+/="
+    , Token.opStart = oneOf "!&*+/=-"
+    , Token.opLetter = oneOf "!&*+/=-"
     , Token.caseSensitive = True
     , Token.reservedNames = 
       [ "in"
@@ -183,6 +186,7 @@ langStyle =
       , "if"
       , "then"
       , "else"
+      , "dynlift"
       ]
     , Token.reservedOpNames =
         [ "\\"
