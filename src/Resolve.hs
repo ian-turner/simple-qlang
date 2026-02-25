@@ -95,48 +95,59 @@ runResolve m = runExcept m
 -- | Function for resolving a concrete syntax
 -- | expression to an abstract syntax expression
 resolve :: LScope -> C.Exp -> Resolve A.Exp
+
+-- | Resolve individual variables
 resolve scope (C.Var v) =
   case lookupLScope scope v of
     Nothing -> throwError $ NotInScope v
     Just x  -> return x
 
+-- | Resolve function application
 resolve scope (C.App x y) =
   do m <- resolve scope x
      n <- resolve scope y
      return $ A.App m n
 
+-- | Resolve the `unit` expression
 resolve scope C.Unit = return A.Unit
 
+-- | Resolve empty `let` bindings
 resolve scope (C.Let [] m) = resolve scope m
 
+-- | Resolve single `let` bindings
 resolve scope (C.Let ((C.BSingle s n):defs) m) =
   lscopeVars scope [s] $ \ scope' (x:[]) ->
     do n' <- resolve scope n
        m' <- resolve scope' (C.Let defs m)
        return (A.Let n' (x :. m'))
 
+-- | Resolve tuple `let` bindings
 resolve scope (C.Let ((C.BTuple vars n):defs) m) =
   lscopeVars scope vars $ \ scope' xs ->
     do n' <- resolve scope n
        m' <- resolve scope' (C.Let defs m)
        return (A.LetTuple n' (xs :. m'))
 
+-- | Resolve tuple expressions
 resolve scope (C.Tuple xs) =
   do xs' <- mapM (resolve scope) xs
      return (A.Tuple xs')
 
+-- | Resolve if/then/else expressions
 resolve scope (C.IfExp b t f) =
   do b' <- resolve scope b
      t' <- resolve scope t
      f' <- resolve scope f
      return (A.IfExp b' t' f')
 
+-- | Resolve explicit number constants
 resolve scope (C.NumInt n) = return (A.NumInt n)
-
 resolve scope (C.NumFloat x) = return (A.NumFloat x)
 
+-- | Resolve dynamic lifting
 resolve scope C.Dynlift = return A.Dynlift
 
+-- | Resolve lambda expressions
 resolve scope (C.Lam xs exp) =
   do lscopeVars scope xs $ \ d xs' ->
        do exp' <- resolve d exp
@@ -155,12 +166,15 @@ addConst x f scope =
 -- | Function for resolving a concrete syntax
 -- | declaration to an abstract syntax declaration
 resolveDecl :: Scope -> C.Decl -> Resolve (A.Decl, Scope)
+
+-- | Resolve global variable definitions
 resolveDecl scope (C.VarDef name exp) =
   do scope' <- addConst name A.Const scope
      let lscope = toLScope scope'
      exp' <- resolve lscope exp
      return (A.Def name exp', scope')
 
+-- | Resolve function definitions
 resolveDecl scope (C.FunDef name args def) =
   do scope' <- addConst name A.Const scope
      let lscope = toLScope scope'
