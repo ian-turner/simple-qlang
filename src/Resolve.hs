@@ -86,11 +86,11 @@ data ScopeError
   deriving (Show, Eq)
 
 -- | Monad for scope resolution
-type Resolve a = ExceptT ScopeError Identity a
+type Resolve a = Except ScopeError a
 
 -- | A run function for resolving a single exp/decl
 runResolve :: Resolve a -> Either ScopeError a
-runResolve m = runIdentity $ runExceptT m
+runResolve m = runExcept m
 
 -- | Function for resolving a concrete syntax
 -- | expression to an abstract syntax expression
