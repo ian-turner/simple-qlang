@@ -1,21 +1,28 @@
+module tele where
+
+
+-- Classically-controlled X gate
 ctrlX x phi =
   if (dynlift (meas x)) then
     xgate phi
   else
     phi
 
+-- Classically-controlled Z gate
 ctrlZ x phi =
   if (dynlift (meas x)) then
     zgate phi
   else
     phi
 
+-- Creates Bell_00 state
 bell00 x =
   let
     a = init ()
     b = init ()
   in (cnot (hgate a) b)
 
+-- Teleports qubit `phi`
 tele phi =
   let
     (a, b) = bell00 ()
@@ -25,6 +32,7 @@ tele phi =
     b = ctrlZ b phi
   in b
 
+-- Defines output variables
 output =
   let
     a = init ()

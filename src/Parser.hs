@@ -43,6 +43,9 @@ parseModule srcName cnts st = runIndent $ runParserT decls st srcName cnts
 
 decls :: Parser ([Decl], ParserState)
 decls = do
+    reserved "module"
+    name <- identifier
+    reserved "where"
     bs <- block decl
     st <- getState
     return (bs, st)

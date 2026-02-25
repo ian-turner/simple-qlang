@@ -1,9 +1,14 @@
+module bell00 where
+
+
+-- Creates Bell_00 state
 bell00 x =
   let
     a = init ()
     b = init ()
   in (cnot (hgate a) b)
 
+-- Defines output variables
 output =
   let
     (a, b) = bell00 ()
