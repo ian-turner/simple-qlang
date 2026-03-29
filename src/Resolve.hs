@@ -181,3 +181,15 @@ resolveDecl scope (C.FunDef name args def) =
      lscopeVars lscope args $ \ d xs ->
        do def' <- resolve d def
           return (A.Def name (A.Lam (xs :. def')), scope')
+
+-- | Resolve type annotations (no scope changes, types are not yet checked)
+resolveDecl scope (C.TypeSig name typeExp) =
+  return (A.TypeSig name (resolveType typeExp), scope)
+
+-- | Translate a concrete type expression to abstract syntax
+resolveType :: C.TypeExp -> A.TypeExp
+resolveType (C.TyVar s)      = A.TyVar s
+resolveType (C.TyCon s)      = A.TyCon s
+resolveType (C.TyApp t1 t2)  = A.TyApp (resolveType t1) (resolveType t2)
+resolveType (C.TyFun t1 t2)  = A.TyFun (resolveType t1) (resolveType t2)
+resolveType (C.TyTuple ts)   = A.TyTuple (map resolveType ts)

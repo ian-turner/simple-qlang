@@ -5,6 +5,7 @@ module Parser where
 
 import Control.Monad
 import Control.Monad.Identity
+import Data.Char (isUpper, isLower)
 import Text.Parsec.Indent
 import Text.Parsec.Language
 import Text.Parsec hiding (Empty, ParseError, State)
@@ -51,7 +52,7 @@ decls = do
     return (bs, st)
 
 decl :: Parser Decl
-decl = try funDef <|> varDef
+decl = try typeSig <|> try funDef <|> varDef
 
 funDef :: Parser Decl
 funDef = do
@@ -159,6 +160,60 @@ lamExp = do
 dynliftExp :: Parser Exp
 dynliftExp = reserved "dynlift" >> return Dynlift
 
+-- | Parse a type annotation declaration: name : typeExp
+typeSig :: Parser Decl
+typeSig = do
+  name <- var
+  reservedOp ":"
+  ty <- typeExp
+  return $ TypeSig name ty
+
+-- | Parse a type expression (right-associative ->)
+typeExp :: Parser TypeExp
+typeExp = do
+  t <- typeApp
+  option t $ do
+    reservedOp "->"
+    t' <- typeExp
+    return $ TyFun t t'
+
+-- | Parse type application (juxtaposition, left-associative).
+-- Uses withPos/indented so subsequent atoms must be indented further than
+-- the start of the application, preventing consumption of the next declaration.
+typeApp :: Parser TypeExp
+typeApp = withPos $ do
+  t <- typeAtom
+  ts <- many (try (indented >> typeAtom))
+  return $ foldl TyApp t ts
+
+-- | Parse an atomic type expression
+typeAtom :: Parser TypeExp
+typeAtom = tyVar <|> tyCon <|> tyParens
+
+-- | Parse a type variable (lowercase identifier)
+tyVar :: Parser TypeExp
+tyVar = try $ do
+  name <- identifier
+  if isLower (head name)
+    then return (TyVar name)
+    else fail "expected type variable"
+
+-- | Parse a type constructor (uppercase identifier)
+tyCon :: Parser TypeExp
+tyCon = try $ do
+  name <- identifier
+  if isUpper (head name)
+    then return (TyCon name)
+    else fail "expected type constructor"
+
+-- | Parse a parenthesized type or tuple type
+tyParens :: Parser TypeExp
+tyParens = do
+  ts <- parens (typeExp `sepBy1` comma)
+  case ts of
+    [t] -> return t
+    _   -> return $ TyTuple ts
+
 varExp :: Parser Exp
 varExp = (var >>= \x -> return $ Var x)
 
@@ -180,8 +235,8 @@ langStyle =
     , Token.nestedComments = True
     , Token.identStart = letter
     , Token.identLetter = alphaNum <|> oneOf "_'"
-    , Token.opStart = oneOf "!&*+/=-"
-    , Token.opLetter = oneOf "!&*+/=-"
+    , Token.opStart = oneOf "!&*+/=-:"
+    , Token.opLetter = oneOf "!&*+/=-:"
     , Token.caseSensitive = True
     , Token.reservedNames = 
       [ "in"
@@ -196,6 +251,7 @@ langStyle =
         , "="
         , "()"
         , "->"
+        , ":"
         ]
     }
 

@@ -2,6 +2,7 @@ module bell00 where
 
 
 -- Creates Bell_00 state
+bell00 : Unit -> (Qubit, Qubit)
 bell00 x =
   let
     a = init ()
@@ -9,6 +10,7 @@ bell00 x =
   in (cnot (hgate a) b)
 
 -- Defines output variables
+output : (Bool, Bool)
 output =
   let
     (a, b) = bell00 ()

@@ -35,6 +35,16 @@ data Exp
   deriving (Eq, Generic, Nominal,
     NominalShow, NominalSupport, Show)
 
+-- | Type expressions (no variable binding, no Nominal instances needed)
+data TypeExp
+  = TyVar String                        -- Type variable (lowercase, e.g. a, b)
+  | TyCon String                        -- Type constant (uppercase, e.g. Int, Qubit)
+  | TyApp TypeExp TypeExp               -- Type application (e.g. Maybe a)
+  | TyFun TypeExp TypeExp               -- Function type (e.g. a -> b)
+  | TyTuple [TypeExp]                   -- Tuple type (e.g. (a, b))
+  deriving (Show, Eq)
+
 data Decl
   = Def String Exp
+  | TypeSig String TypeExp              -- Type annotation (e.g. f : a -> b)
   deriving (Show, Eq)

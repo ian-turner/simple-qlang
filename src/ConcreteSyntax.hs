@@ -19,7 +19,17 @@ data Exp
   | Dynlift                             -- Dynamic lifting function
   deriving (Show, Eq)
 
+-- | Type expressions
+data TypeExp
+  = TyVar String                        -- Type variable (lowercase, e.g. a, b)
+  | TyCon String                        -- Type constant (uppercase, e.g. Int, Qubit)
+  | TyApp TypeExp TypeExp               -- Type application (e.g. Maybe a)
+  | TyFun TypeExp TypeExp               -- Function type (e.g. a -> b)
+  | TyTuple [TypeExp]                   -- Tuple type (e.g. (a, b))
+  deriving (Show, Eq)
+
 data Decl
   = VarDef String Exp                   -- Variable declarations
   | FunDef String [String] Exp          -- Function declarations
+  | TypeSig String TypeExp              -- Type annotations (e.g. f : a -> b)
   deriving (Show, Eq)
