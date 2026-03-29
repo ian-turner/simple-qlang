@@ -134,6 +134,102 @@ The linearity constraint (no-cloning) means the optimizer must not beta-expand q
 
 ---
 
+## Worked Example: `bell00` and `output`
+
+Using the FunQ examples from `examples/bell00.funq` as a concrete case.
+
+### Source
+
+```
+bell00 : Unit -> (Qubit, Qubit)
+bell00 x =
+  let
+    a = init ()
+    b = init ()
+  in (cnot (hgate a) b)
+
+output : (Bool, Bool)
+output =
+  let
+    (a, b) = bell00 ()
+  in (meas a, meas b)
+```
+
+### CPS Conversion of `bell00` (§5.1–5.4)
+
+Following Appel's conversion algorithm (Chapter 5), each function gains an extra
+argument `c` — the continuation to call with the result instead of returning.
+
+```
+-- CPS version (pseudocode using FunQ-like syntax)
+bell00 (x, c) =
+  init ((), fun a ->
+  init ((), fun b ->
+  hgate (a, fun a' ->
+  cnot (a', b, fun result ->
+  c result))))
+```
+
+Each operation takes a continuation instead of returning a value. The nesting
+makes evaluation order explicit — `init a` before `init b`, `hgate` before `cnot`.
+
+In Appel's `cexp` datatype (§2.1, pp. 11–12), gates are `PRIMOP`s (primitive
+operations) since they are built-in operations on qubits with a single continuation:
+
+```
+FIX([(bell00, [x, c],
+       PRIMOP(init,  [],              [a],
+       PRIMOP(init,  [],              [b],
+       PRIMOP(hgate, [VAR a],         [a'],
+       PRIMOP(cnot,  [VAR a', VAR b], [q1, q2],
+       APP(VAR c, [TUPLE(VAR q1, VAR q2)])
+       )))))],
+E)
+```
+
+The final `APP(VAR c, [...])` is the "return" — calling the continuation with the
+result instead of using a return statement. Since all calls are tail calls, there
+is no stack (§2.1, p. 14).
+
+### CPS Conversion of `output` — Measurement Branches
+
+Measurement diverges from classical `PRIMOP`s: it is non-deterministic and must
+branch on the outcome. Following the two-continuation `PRIMOP` pattern from
+Appel §2.1 p. 13 (the `>` comparison example), `meas` takes **two continuations**
+— one for the `|0⟩` outcome and one for the `|1⟩` outcome:
+
+```
+APP(VAR bell00, [UNIT, FUN (a, b) ->
+  PRIMOP(meas, [VAR a], [],
+    [ (* outcome |0> *)
+      PRIMOP(meas, [VAR b], [],
+        [ APP(VAR k, [TUPLE(FALSE, FALSE)]),   (* b = |0> *)
+          APP(VAR k, [TUPLE(FALSE, TRUE)]) ]), (* b = |1> *)
+      (* outcome |1> *)
+      PRIMOP(meas, [VAR b], [],
+        [ APP(VAR k, [TUPLE(TRUE, FALSE)]),    (* b = |0> *)
+          APP(VAR k, [TUPLE(TRUE, TRUE)]) ])   (* b = |1> *)
+    ])])
+```
+
+Here `k` is the top-level continuation (the program's final answer). Each
+measurement spawns two continuations, so two measurements produce a tree of
+four possible `APP(VAR k, ...)` leaves — one per basis outcome.
+
+### Key Observations
+
+- **Gate `PRIMOP`**: one continuation — pure sequencing, no branching
+- **Measurement `PRIMOP`**: two continuations — this is where quantum branching
+  lives in the IR; it maps directly to OpenQASM's `if` on a measurement result
+  or QIR's branch-on-result instruction
+- **Nesting depth** of continuations directly encodes circuit depth and qubit
+  liveness: a qubit variable is live from where it is bound (by `init` or a gate
+  `PRIMOP`) until it is consumed (by another gate or `meas`)
+- **No stack**: every call is a tail call (`APP`), so the CPS expression compiles
+  to a flat sequence of instructions — exactly the structure of OpenQASM/QIR
+
+---
+
 ## Next Steps / Chapters to Read
 
 - **Chapter 2** (§2.1–2.5): Full CPS datatype, closure conversion sketch, spilling — understand the complete IR before implementing it
