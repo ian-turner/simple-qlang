@@ -14,4 +14,4 @@ output : (Bool, Bool)
 output =
   let
     (a, b) = bell00 ()
-  in (dynlift (meas a), dynlift (meas b))
+  in (meas a, meas b)
