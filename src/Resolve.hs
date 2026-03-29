@@ -3,6 +3,7 @@ module Resolve where
 import Nominal
 import Nominal.Atom
 import Nominal.Atomic
+import Control.Monad (foldM)
 import Control.Monad.Except
 import Control.Monad.Identity
 import Control.Monad.State
@@ -185,6 +186,16 @@ resolveDecl scope (C.FunDef name args def) =
 -- | Resolve type annotations (no scope changes, types are not yet checked)
 resolveDecl scope (C.TypeSig name typeExp) =
   return (A.TypeSig name (resolveType typeExp), scope)
+
+-- | Resolve data type declarations, adding each constructor to scope
+resolveDecl scope (C.DataDecl name vars condecls) = do
+  scope' <- foldM addConToScope scope condecls
+  return (A.DataDecl name vars (map resolveConDecl condecls), scope')
+  where
+    addConToScope sc (C.ConDecl conName _) =
+      addConst conName A.Con sc
+    resolveConDecl (C.ConDecl conName fields) =
+      A.ConDecl conName (map resolveType fields)
 
 -- | Translate a concrete type expression to abstract syntax
 resolveType :: C.TypeExp -> A.TypeExp

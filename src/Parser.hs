@@ -52,7 +52,7 @@ decls = do
     return (bs, st)
 
 decl :: Parser Decl
-decl = try typeSig <|> try funDef <|> varDef
+decl = try dataDecl <|> try typeSig <|> try funDef <|> varDef
 
 funDef :: Parser Decl
 funDef = do
@@ -160,6 +160,39 @@ lamExp = do
 dynliftExp :: Parser Exp
 dynliftExp = reserved "dynlift" >> return Dynlift
 
+-- | Parse a data type declaration: data Name vars = Con1 fields | Con2 fields
+dataDecl :: Parser Decl
+dataDecl = do
+  reserved "data"
+  name <- conName
+  vars <- many tyVarName
+  reservedOp "="
+  cons <- conDecl `sepBy1` reservedOp "|"
+  return $ DataDecl name vars cons
+
+-- | Parse a single constructor declaration: ConName field1 field2 ...
+conDecl :: Parser ConDecl
+conDecl = withPos $ do
+  name <- conName
+  fields <- many (try (indented >> typeAtom))
+  return $ ConDecl name fields
+
+-- | Parse a constructor name (uppercase identifier)
+conName :: Parser String
+conName = try $ do
+  name <- identifier
+  if isUpper (head name)
+    then return name
+    else fail "expected constructor name"
+
+-- | Parse a type variable name (lowercase identifier)
+tyVarName :: Parser String
+tyVarName = try $ do
+  name <- identifier
+  if isLower (head name)
+    then return name
+    else fail "expected type variable"
+
 -- | Parse a type annotation declaration: name : typeExp
 typeSig :: Parser Decl
 typeSig = do
@@ -235,16 +268,19 @@ langStyle =
     , Token.nestedComments = True
     , Token.identStart = letter
     , Token.identLetter = alphaNum <|> oneOf "_'"
-    , Token.opStart = oneOf "!&*+/=-:"
-    , Token.opLetter = oneOf "!&*+/=-:"
+    , Token.opStart = oneOf "!&*+/=-:|"
+    , Token.opLetter = oneOf "!&*+/=-:|"
     , Token.caseSensitive = True
-    , Token.reservedNames = 
+    , Token.reservedNames =
       [ "in"
       , "let"
       , "if"
       , "then"
       , "else"
       , "dynlift"
+      , "data"
+      , "where"
+      , "module"
       ]
     , Token.reservedOpNames =
         [ "\\"
@@ -252,6 +288,7 @@ langStyle =
         , "()"
         , "->"
         , ":"
+        , "|"
         ]
     }
 

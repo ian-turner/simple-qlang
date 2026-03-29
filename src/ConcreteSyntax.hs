@@ -28,8 +28,13 @@ data TypeExp
   | TyTuple [TypeExp]                   -- Tuple type (e.g. (a, b))
   deriving (Show, Eq)
 
+data ConDecl
+  = ConDecl String [TypeExp]            -- Constructor name + field types
+  deriving (Show, Eq)
+
 data Decl
   = VarDef String Exp                   -- Variable declarations
   | FunDef String [String] Exp          -- Function declarations
   | TypeSig String TypeExp              -- Type annotations (e.g. f : a -> b)
+  | DataDecl String [String] [ConDecl]  -- data Name vars = Con1 fields | Con2 fields
   deriving (Show, Eq)

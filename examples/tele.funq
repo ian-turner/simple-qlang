@@ -2,6 +2,7 @@ module tele where
 
 
 -- Classically-controlled X gate
+ctrl_x : Bool -> Qubit -> Qubit
 ctrl_x x phi =
   if (dynlift (meas x)) then
     xgate phi
@@ -9,6 +10,7 @@ ctrl_x x phi =
     phi
 
 -- Classically-controlled Z gate
+ctrl_z : Bool -> Qubit -> Qubit
 ctrl_z x phi =
   if (dynlift (meas x)) then
     zgate phi
@@ -16,6 +18,7 @@ ctrl_z x phi =
     phi
 
 -- Creates Bell_00 state
+bell00 : Unit -> (Qubit, Qubit)
 bell00 x =
   let
     a = init ()
@@ -23,6 +26,7 @@ bell00 x =
   in (cnot (hgate a) b)
 
 -- Teleports qubit `phi`
+tele : Qubit -> Qubit
 tele phi =
   let
     (a, b) = bell00 ()
@@ -33,6 +37,7 @@ tele phi =
   in b
 
 -- Defines output variables
+output: Bool
 output =
   let
     a = init ()

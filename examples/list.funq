@@ -1,0 +1,7 @@
+module list where
+
+
+data List a = Nil | Cons a (List a)
+
+
+reverse : List a -> List a

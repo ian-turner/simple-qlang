@@ -25,6 +25,7 @@ data Exp
   | Var Variable                              -- Bound variables
   | Const String                              -- Top-level defined constant
   | Base String                               -- Compiler-defined constant
+  | Con String                                -- Data constructor
   | Tuple [Exp]                               -- Tuple of objects (any size)
   | App Exp Exp                               -- Function application
   | Lam (Bind [Variable] Exp)                 -- Bound lambda expression
@@ -44,7 +45,12 @@ data TypeExp
   | TyTuple [TypeExp]                   -- Tuple type (e.g. (a, b))
   deriving (Show, Eq)
 
+data ConDecl
+  = ConDecl String [TypeExp]            -- Constructor name + field types
+  deriving (Show, Eq)
+
 data Decl
   = Def String Exp
   | TypeSig String TypeExp              -- Type annotation (e.g. f : a -> b)
+  | DataDecl String [String] [ConDecl]  -- data Name vars = Con1 fields | Con2 fields
   deriving (Show, Eq)
