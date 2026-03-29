@@ -148,11 +148,47 @@ resolve scope (C.NumFloat x) = return (A.NumFloat x)
 -- | Resolve dynamic lifting
 resolve scope C.Dynlift = return A.Dynlift
 
+-- | Resolve case expressions
+resolve scope (C.CaseExp scrut alts) =
+  do scrut' <- resolve scope scrut
+     alts'  <- mapM (resolveAlt scope) alts
+     return (A.Case scrut' alts')
+
 -- | Resolve lambda expressions
 resolve scope (C.Lam xs exp) =
   do lscopeVars scope xs $ \ d xs' ->
        do exp' <- resolve d exp
           return (A.Lam (xs' :. exp'))
+
+-- | Resolve a single case alternative, binding pattern variables
+resolveAlt :: LScope -> (C.Pat, C.Exp) -> Resolve A.Alt
+resolveAlt scope (p, rhs) =
+  let vars = patVars p
+  in lscopeVars scope vars $ \scope' xs ->
+    do let varMap = Map.fromList (zip vars xs)
+       let p'    = resolvePat varMap p
+       rhs'     <- resolve scope' rhs
+       return $ A.Alt (xs :. (p', rhs'))
+
+-- | Extract variable names from a flat concrete pattern
+patVars :: C.Pat -> [String]
+patVars (C.PVar x)       = [x]
+patVars C.PWild          = []
+patVars (C.PCon _ args)  = [x | C.FArg x <- args]
+patVars (C.PTuple args)  = [x | C.FArg x <- args]
+patVars C.PUnit          = []
+
+-- | Translate a concrete pattern to abstract, using a variable map
+resolvePat :: Map String Variable -> C.Pat -> A.Pat
+resolvePat m (C.PVar x)       = A.PVar (m Map.! x)
+resolvePat _ C.PWild          = A.PWild
+resolvePat m (C.PCon n args)  = A.PCon n (map (resolveField m) args)
+resolvePat m (C.PTuple args)  = A.PTuple (map (resolveField m) args)
+resolvePat _ C.PUnit          = A.PUnit
+
+resolveField :: Map String Variable -> C.FlatArg -> A.PatField
+resolveField m (C.FArg x) = A.PFVar (m Map.! x)
+resolveField _ C.FWild    = A.PFWild
 
 -- | Add a constant to the scope
 addConst :: String -> (String -> A.Exp) -> Scope -> Resolve Scope

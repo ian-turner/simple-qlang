@@ -18,6 +18,25 @@ import Nominal.Atomic
 import Utils
 
 
+-- | Flat pattern argument in abstract syntax
+data PatField
+  = PFVar Variable                            -- bound variable field
+  | PFWild                                    -- wildcard field
+  deriving (Eq, Generic, Nominal, NominalShow, NominalSupport, Show)
+
+-- | Flat patterns in abstract syntax
+data Pat
+  = PVar Variable                             -- variable pattern
+  | PWild                                     -- wildcard _
+  | PCon String [PatField]                    -- constructor pattern
+  | PTuple [PatField]                         -- tuple pattern
+  | PUnit                                     -- unit pattern
+  deriving (Eq, Generic, Nominal, NominalShow, NominalSupport, Show)
+
+-- | A case alternative: variables bound over both pattern and RHS
+data Alt = Alt (Bind [Variable] (Pat, Exp))
+  deriving (Eq, Generic, Nominal, NominalShow, NominalSupport, Show)
+
 data Exp
   = Unit                                      -- Unit type instance
   | NumInt Int                                -- Numbers
@@ -32,6 +51,7 @@ data Exp
   | Let Exp (Bind Variable Exp)               -- Bound let expressions
   | LetTuple Exp (Bind [Variable] Exp)
   | IfExp Exp Exp Exp                         -- If/then/else branching
+  | Case Exp [Alt]                            -- Case expression
   | Dynlift                                   -- Dynamic lifting
   deriving (Eq, Generic, Nominal,
     NominalShow, NominalSupport, Show)

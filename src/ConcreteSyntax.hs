@@ -6,6 +6,21 @@ data LetBinding
   | BTuple [String] Exp
   deriving (Show, Eq)
 
+-- | Flat pattern argument: a bound variable or a wildcard
+data FlatArg
+  = FArg String                         -- bound variable
+  | FWild                               -- wildcard _
+  deriving (Show, Eq)
+
+-- | Flat patterns (one level deep)
+data Pat
+  = PVar String                         -- variable pattern
+  | PWild                               -- wildcard _
+  | PCon String [FlatArg]               -- constructor pattern (flat args)
+  | PTuple [FlatArg]                    -- tuple pattern (flat args)
+  | PUnit                               -- unit pattern ()
+  deriving (Show, Eq)
+
 data Exp
   = Unit                                -- Unit type and value
   | NumInt Int                          -- Numbers
@@ -16,6 +31,7 @@ data Exp
   | Let [LetBinding] Exp                -- Let expression
   | Lam [String] Exp                    -- Lambda expressions
   | IfExp Exp Exp Exp                   -- If/then/else expressions
+  | CaseExp Exp [(Pat, Exp)]            -- case expression
   | Dynlift                             -- Dynamic lifting function
   deriving (Show, Eq)
 

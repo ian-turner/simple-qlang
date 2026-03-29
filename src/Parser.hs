@@ -77,6 +77,7 @@ atomExp =
   unit
   <|> try lamExp
   <|> try letExp
+  <|> try caseExp
   <|> try tupleExp
   <|> try ifExp
   <|> try num
@@ -159,6 +160,55 @@ lamExp = do
 
 dynliftExp :: Parser Exp
 dynliftExp = reserved "dynlift" >> return Dynlift
+
+-- | Parse a case expression
+caseExp :: Parser Exp
+caseExp = do
+  reserved "case"
+  scrut <- term
+  reserved "of"
+  alts <- block caseAlt
+  return $ CaseExp scrut alts
+
+-- | Parse a single case alternative: pat -> expr
+caseAlt :: Parser (Pat, Exp)
+caseAlt = do
+  p <- pat
+  reservedOp "->"
+  e <- term
+  return (p, e)
+
+-- | Parse a flat pattern
+pat :: Parser Pat
+pat = try patCon <|> try patTuple <|> patUnit <|> patWild <|> patVar
+  where
+    patVar = do
+      name <- identifier
+      return $ PVar name
+    patWild =
+      lexeme (char '_' <* notFollowedBy (alphaNum <|> oneOf "_'")) >> return PWild
+    patUnit =
+      reservedOp "()" >> return PUnit
+    patTuple = do
+      args <- parens (flatArg `sepBy1` comma)
+      case args of
+        [FArg x] -> return $ PVar x
+        [FWild]  -> return PWild
+        _        -> return $ PTuple args
+    patCon = do
+      name <- conName
+      args <- many flatArg
+      return $ PCon name args
+
+-- | Parse a flat pattern argument (variable or wildcard)
+flatArg :: Parser FlatArg
+flatArg = flatWild <|> flatVar
+  where
+    flatWild =
+      lexeme (char '_' <* notFollowedBy (alphaNum <|> oneOf "_'")) >> return FWild
+    flatVar = do
+      name <- identifier
+      return $ FArg name
 
 -- | Parse a data type declaration: data Name vars = Con1 fields | Con2 fields
 dataDecl :: Parser Decl
@@ -281,6 +331,8 @@ langStyle =
       , "data"
       , "where"
       , "module"
+      , "case"
+      , "of"
       ]
     , Token.reservedOpNames =
         [ "\\"

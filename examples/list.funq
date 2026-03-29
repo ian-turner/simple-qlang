@@ -4,4 +4,19 @@ module list where
 data List a = Nil | Cons a (List a)
 
 
+concat : List a -> List a -> List a
+concat xs ys =
+  case xs of
+    Nil -> ys
+    Cons x xs' ->
+      let ys' = concat xs' ys
+      in (Cons x ys')
+
+
 reverse : List a -> List a
+reverse xs =
+  case xs of
+    Nil -> xs
+    Cons x xs' ->
+      let xs'' = reverse xs'
+      in (concat xs'' (Cons x Nil))
