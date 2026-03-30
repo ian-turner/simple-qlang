@@ -44,4 +44,8 @@ data CExp
     --   [Variable] — result variables bound in the continuation(s)
     --   [CExp]     — continuation expression(s):
     --                  one for pure/gate ops, two for PMeas
+  | COffset  Int Value Variable CExp
+    -- ^ Interior pointer into a heap record.
+    --   Bind (base + n words) to Variable, continue.
+    --   Used to give each function in a shared closure its own field-0 code pointer.
   deriving (Show)

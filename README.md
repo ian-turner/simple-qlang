@@ -100,6 +100,7 @@ src/
   Lower.hs          — lowering pass (Syntax -> LambdaIR)
   CPSExp.hs         — CPS IR datatype (CExp, Value); Appel §2.1
   ToCPS.hs          — CPS conversion pass (LambdaIR -> CPSExp); Appel Ch 5
+  ClosureConv.hs    — closure conversion pass (CPSExp -> CPSExp); Appel Ch 10
   TopMonad.hs       — top-level compilation monad
   Utils.hs          — shared utilities
 examples/           — sample FunQ programs
@@ -128,9 +129,9 @@ for f in examples/*.funq; do
 done
 ```
 
-The compiler currently parses, scope-resolves, lowers to Lambda IR, and converts
-to CPS, printing both IRs to stdout. Closure conversion and code generation are
-not yet implemented.
+The compiler currently parses, scope-resolves, lowers to Lambda IR, converts to
+CPS, and performs closure conversion, printing all three IRs to stdout. Code
+generation is not yet implemented.
 
 ---
 
@@ -144,7 +145,7 @@ not yet implemented.
 | Type checking (linear types) | Deferred |
 | CPS conversion (Appel Ch 5) | Done |
 | CPS optimisation | Deferred |
-| Closure conversion | Not started |
+| Closure conversion (Appel Ch 10) | Done |
 | Register spilling | Deferred |
 | OpenQASM / QIR emission | Not started |
 
