@@ -26,4 +26,5 @@ ghz_n : Int -> List Qubit
 ghz_n n =
   let a = hgate (init ())
       qs = init_n n
-  in (cnot_layer a qs)
+      (a', qs') = (cnot_layer a qs)
+  in (Cons a' qs')

@@ -1,4 +1,4 @@
-# Revision history for simple-qlang
+# Revision history for FunQ
 
 ## 0.1.0.0 -- YYYY-mm-dd
 

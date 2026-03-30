@@ -44,7 +44,7 @@ FunQ looks like a small ML-family language. It has:
 | `hgate` | `Qubit -> Qubit` | Hadamard gate |
 | `xgate` | `Qubit -> Qubit` | Pauli-X (NOT) gate |
 | `zgate` | `Qubit -> Qubit` | Pauli-Z gate |
-| `cnot` | `(Qubit, Qubit) -> (Qubit, Qubit)` | Controlled-NOT gate |
+| `cnot` | `Qubit -> Qubit -> (Qubit, Qubit)` | Controlled-NOT gate |
 
 ### Example: Bell state
 
