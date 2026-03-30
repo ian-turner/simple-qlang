@@ -5,9 +5,12 @@ module CompilePipeline
   , compileModule
   ) where
 
+import qualified Data.Graph as Graph
+import qualified Data.Set as Set
+
 import Syntax (Decl)
 import LambdaIR (LExp)
-import CPSExp (CExp)
+import CPSExp (CExp(..), Value(..))
 import Lower (lowerDecl, runLower)
 import ToCPS (toCPSDecl)
 import RecElim (elimRecursion)
@@ -50,7 +53,7 @@ data CompiledDecl = CompiledDecl
 
 compileModule :: [Decl] -> CompiledModule
 compileModule decls =
-  let initialItems = map compileDecl decls
+  let initialItems = applyTopLevelRecursionCheck (map compileDecl decls)
       shapes = analyzeModuleRecordShapes (shapeInputs initialItems)
       interfacedItems = map (prepareDecl shapes) initialItems
       callableKinds = analyzeModuleCallableKinds (classificationInputs interfacedItems)
@@ -97,6 +100,72 @@ compileDecl decl =
                   , compiledHoistedIR = Nothing
                   , compiledFlattenedIR = Nothing
                   }
+
+
+applyTopLevelRecursionCheck :: [CompiledItem] -> [CompiledItem]
+applyTopLevelRecursionCheck items =
+  case groups of
+    [] -> items
+    _ ->
+      map (markRecursiveDecl recursiveNames) items
+  where
+    groups = recursiveTopLevelGroups items
+    recursiveNames = Set.fromList (concat groups)
+
+
+recursiveTopLevelGroups :: [CompiledItem] -> [[String]]
+recursiveTopLevelGroups items =
+  [ componentNames
+  | Graph.CyclicSCC componentNames <- Graph.stronglyConnComp graphNodes
+  ]
+  where
+    availableNames =
+      Set.fromList
+        [ compiledName decl
+        | Compiled decl <- items
+        ]
+    graphNodes =
+      [ (name, name, Set.toList (Set.intersection availableNames (topLevelCallees expr)))
+      | Compiled decl <- items
+      , Right expr <- [compiledRecursionResult decl]
+      , let name = compiledName decl
+      ]
+
+
+markRecursiveDecl :: Set.Set String -> CompiledItem -> CompiledItem
+markRecursiveDecl _ SkippedDecl = SkippedDecl
+markRecursiveDecl _ (LoweringError err) = LoweringError err
+markRecursiveDecl recursiveNames (Compiled compiledDecl)
+  | compiledName compiledDecl `Set.member` recursiveNames =
+      Compiled compiledDecl
+        { compiledRecursionResult =
+            Left
+              ( "RecElim: top-level recursive declaration `"
+                  ++ compiledName compiledDecl
+                  ++ "' is not yet supported — recursive label cycles cannot be emitted as OpenQASM. Supply a static bound or restructure the algorithm."
+              )
+        }
+  | otherwise =
+      Compiled compiledDecl
+
+
+topLevelCallees :: CExp -> Set.Set String
+topLevelCallees (CRecord _ _ body) =
+  topLevelCallees body
+topLevelCallees (CSelect _ _ _ body) =
+  topLevelCallees body
+topLevelCallees (COffset _ _ _ body) =
+  topLevelCallees body
+topLevelCallees (CApp (VLabel name) _) =
+  Set.singleton name
+topLevelCallees (CApp _ _) =
+  Set.empty
+topLevelCallees (CFix defs body) =
+  Set.unions (topLevelCallees body : [topLevelCallees defBody | (_, _, defBody) <- defs])
+topLevelCallees (CSwitch _ arms) =
+  Set.unions (map topLevelCallees arms)
+topLevelCallees (CPrimOp _ _ _ conts) =
+  Set.unions (map topLevelCallees conts)
 
 
 prepareDecl :: ModuleRecordShapes -> CompiledItem -> CompiledItem
