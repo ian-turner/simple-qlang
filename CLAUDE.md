@@ -11,9 +11,9 @@ cabal build                              # build the compiler
 cabal run funq -- examples/bell00.funq  # run on a source file
 ```
 
-The compiler runs the full pipeline through closure conversion and prints each
-IR stage to stdout.  There is no test suite yet — verify changes by running
-the examples manually.
+The compiler runs the full pipeline through qubit hoisting and prints each IR
+stage to stdout.  There is no test suite yet — verify changes by running the
+examples manually.
 
 ---
 
@@ -33,6 +33,8 @@ the examples manually.
 | `ToCPS.hs` | CPS conversion: `LExp` → `CExp` (Appel Ch 5) |
 | `RecElim.hs` | Recursion check: errors on recursive `CFix` groups |
 | `ClosureConv.hs` | Closure conversion: eliminates free variables (Appel Ch 10) |
+| `Defunc.hs` | Defunctionalization: replaces runtime code pointers with tags and dispatch |
+| `QubitHoist.hs` | Hoists `init` to static qubit slots after defunctionalization |
 | `Main.hs` | Orchestrates the full pipeline; prints each IR stage |
 
 ## Key dependencies
@@ -45,10 +47,11 @@ the examples manually.
 
 ## Project goal
 
-FunQ is a functional quantum language with linear types that compiles to
-OpenQASM / QIR. The planned compilation pipeline follows Appel's *Compiling
-with Continuations* (1992). See `notes/cps-compilation-strategy.md` for the
-full pipeline with required/optional classification.
+FunQ is a functional quantum language with linear types that currently targets
+OpenQASM. The middle end is intended to stay reusable for a future QIR
+backend. The planned compilation pipeline follows Appel's *Compiling with
+Continuations* (1992). See `notes/cps-compilation-strategy.md` for the full
+pipeline with required/optional classification.
 
 **Current priority**: complete all required stages end-to-end before
 introducing any optional optimizations or the linear type checker.
@@ -57,10 +60,10 @@ introducing any optional optimizations or the linear type checker.
 1. Parse + scope resolve — *done*
 2. Lower to λ-calculus IR (Appel Ch 4) — *done*
 3. CPS conversion (Appel Ch 5) — *done*
-4. Closure conversion (Appel Ch 10) — *done*
-5. Recursion elimination — *done* (errors on recursive programs; unrolling deferred)
-6. Defunctionalization
-7. Qubit hoisting
+4. Recursion elimination — *done* (errors on recursive programs; unrolling deferred)
+5. Closure conversion (Appel Ch 10) — *done*
+6. Defunctionalization — *done*
+7. Qubit hoisting — *done*
 8. Tuple/record flattening
 9. Gate/def classification
 10. Emit OpenQASM

@@ -44,6 +44,6 @@ Codex-specific project context for FunQ.
 
 - No type checker yet
 - No automated test suite yet
-- No backend emitter yet
-- Several notes still mention QIR as future scope; keep current code focused on
-  OpenQASM while preserving backend-neutral middle-end structure
+- No OpenQASM emitter yet
+- QIR remains future scope only; keep current code focused on OpenQASM while
+  preserving backend-neutral middle-end structure

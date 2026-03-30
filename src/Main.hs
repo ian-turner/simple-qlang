@@ -14,6 +14,7 @@ import ToCPS (toCPSDecl)
 import RecElim (elimRecursion)
 import ClosureConv (closureConvert)
 import Defunc (defunctionalize)
+import QubitHoist (HoistedProgram(..), hoistQubits)
 
 
 parserIO :: Either ParseError a -> IO a
@@ -68,4 +69,10 @@ main = do
               putStrLn $ "  " ++ name ++ " = " ++ show ccExp
               putStrLn $ ""
               putStrLn "=== Defunctionalized IR ==="
-              putStrLn $ "  " ++ name ++ " = " ++ show (defunctionalize ccExp)
+              let defuncExp = defunctionalize ccExp
+              putStrLn $ "  " ++ name ++ " = " ++ show defuncExp
+              putStrLn $ ""
+              putStrLn "=== Qubit-Hoisted IR ==="
+              let hoisted = hoistQubits defuncExp
+              putStrLn $ "  qubits = " ++ show (hoistedQubitCount hoisted)
+              putStrLn $ "  " ++ name ++ " = " ++ show (hoistedBody hoisted)

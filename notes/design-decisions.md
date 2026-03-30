@@ -12,6 +12,8 @@ Implication:
 - CPS conversion, recursion handling, closure conversion, and
   defunctionalization should not encode OpenQASM-specific constraints unless a
   backend-neutral formulation is impossible
+- stage-status notes and top-level project docs should describe OpenQASM as the
+  current target, with QIR mentioned only as future scope
 
 ## Measurement Semantics
 

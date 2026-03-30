@@ -1,7 +1,8 @@
 # FunQ
 
-FunQ is a functional quantum programming language with linear types. It compiles
-to OpenQASM / QIR, targeting near-term quantum hardware.
+FunQ is a functional quantum programming language with linear types. It
+currently targets OpenQASM, with the middle end structured so a future QIR
+backend can reuse the same normalized IR.
 
 The compiler is written in Haskell and follows the compilation pipeline described
 in Appel's *Compiling with Continuations* (1992), adapted for quantum semantics.
@@ -102,6 +103,7 @@ src/
   ToCPS.hs          — CPS conversion pass (LambdaIR -> CPSExp); Appel Ch 5
   ClosureConv.hs    — closure conversion pass (CPSExp -> CPSExp); Appel Ch 10
   Defunc.hs         — defunctionalization pass (CPSExp -> CPSExp)
+  QubitHoist.hs     — static qubit-slot assignment after defunctionalization
   TopMonad.hs       — top-level compilation monad
   Utils.hs          — shared utilities
 examples/           — sample FunQ programs
@@ -131,8 +133,9 @@ done
 ```
 
 The compiler currently parses, scope-resolves, lowers to Lambda IR, converts to
-CPS, performs closure conversion, and defunctionalizes closure values, printing
-each IR stage to stdout. Code generation is not yet implemented.
+CPS, performs closure conversion, defunctionalizes closure values, and hoists
+qubit allocation to static backend slots, printing each IR stage to stdout.
+Code generation is not yet implemented.
 
 ---
 
@@ -148,7 +151,10 @@ each IR stage to stdout. Code generation is not yet implemented.
 | CPS optimisation | Deferred |
 | Closure conversion (Appel Ch 10) | Done |
 | Defunctionalization | Done |
+| Qubit hoisting | Done |
+| Tuple/record flattening | Not started |
+| Gate/def classification | Not started |
 | Register spilling | Deferred |
-| OpenQASM / QIR emission | Not started |
+| OpenQASM emission | Not started |
 
 See `notes/appel/index.md` for the mapping of remaining stages to Appel chapters.

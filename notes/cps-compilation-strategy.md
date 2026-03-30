@@ -201,19 +201,25 @@ with integer tags in closure records and rewrites indirect closure calls into
 `SWITCH`-based dispatch over direct `VLabel` calls. Dispatch sets are currently
 per-declaration rather than minimized per call site.
 
-### 7. Qubit hoisting **[required]**
+### 7. Qubit hoisting **[required, done]**
 **OpenQASM requires all qubit declarations at top-level scope.**
 FunQ's `init()` creates qubits dynamically inside expressions.
 
 This pass:
 1. Statically counts all qubit allocations in the program
-2. Emits `qubit q_i;` declarations at program scope
+2. Records how many backend qubit slots later emission must declare
 3. Replaces each `PRIMOP(init, [], [q], [E])` with the statically assigned
-   slot `q_i`, inserting `reset q_i;` as needed by the backend representation
+   slot `q_i`
 
 Initial policy: **one slot per `init`**. This first version does not perform
 liveness-based qubit reuse. A later optimisation pass may recycle slots once
 qubit lifetimes are analysed precisely.
+
+Current status: implemented in `src/QubitHoist.hs`. The pass rewrites `PInit`
+sites after defunctionalization, substitutes the bound result variable with
+`VQubit i`, and returns the total number of required qubit slots alongside the
+rewritten CPS expression. Actual `qubit q_i;` declarations and `reset`
+insertion remain part of the future OpenQASM emission stage.
 
 ### 8. Tuple/record flattening **[required]**
 **OpenQASM has no tuple type.** The CPS IR uses `RECORD`/`SELECT` for tuples

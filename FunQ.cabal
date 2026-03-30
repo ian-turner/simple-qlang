@@ -75,6 +75,7 @@ executable funq
         RecElim
         ClosureConv
         Defunc
+        QubitHoist
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
