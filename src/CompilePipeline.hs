@@ -11,6 +11,7 @@ import CPSExp (CExp)
 import Lower (lowerDecl, runLower)
 import ToCPS (toCPSDecl)
 import RecElim (elimRecursion)
+import ModuleRecordFlatten (flattenModuleRecordInterfaces)
 import ClosureConv (closureConvert)
 import Defunc (defunctionalize)
 import QubitHoist (HoistedProgram(..), hoistQubits)
@@ -36,6 +37,7 @@ data CompiledDecl = CompiledDecl
   , compiledLambdaIR        :: LExp
   , compiledCPSIR           :: CExp
   , compiledRecursionResult :: Either String CExp
+  , compiledInterfaceIR     :: Maybe CExp
   , compiledClosureIR       :: Maybe CExp
   , compiledDefuncIR        :: Maybe CExp
   , compiledHoistedIR       :: Maybe HoistedProgram
@@ -45,11 +47,13 @@ data CompiledDecl = CompiledDecl
 
 compileModule :: [Decl] -> CompiledModule
 compileModule decls =
-  let items = map compileDecl decls
+  let initialItems = map compileDecl decls
+      shapes = analyzeModuleRecordShapes (shapeInputs initialItems)
+      items = map (finalizeDecl shapes) initialItems
   in CompiledModule
        { compiledItems = items
        , compiledEntryPoints = findEntryPoints items
-       , compiledRecordShapes = analyzeModuleRecordShapes (shapeInputs items)
+       , compiledRecordShapes = shapes
        }
 
 
@@ -67,25 +71,45 @@ compileDecl decl =
                , compiledLambdaIR = lexp
                , compiledCPSIR = cpsExp
                , compiledRecursionResult = Left err
+               , compiledInterfaceIR = Nothing
                , compiledClosureIR = Nothing
                , compiledDefuncIR = Nothing
                , compiledHoistedIR = Nothing
                , compiledFlattenedIR = Nothing
                }
            Right cpsExp' ->
-             let ccExp = closureConvert cpsExp'
-                 defuncExp = defunctionalize ccExp
-                 hoisted = hoistQubits defuncExp
-             in Compiled CompiledDecl
-                  { compiledName = name
+             Compiled CompiledDecl
+                 { compiledName = name
                   , compiledLambdaIR = lexp
                   , compiledCPSIR = cpsExp
                   , compiledRecursionResult = Right cpsExp'
-                  , compiledClosureIR = Just ccExp
-                  , compiledDefuncIR = Just defuncExp
-                  , compiledHoistedIR = Just hoisted
-                  , compiledFlattenedIR = Just (flattenRecords (hoistedBody hoisted))
+                  , compiledInterfaceIR = Nothing
+                  , compiledClosureIR = Nothing
+                  , compiledDefuncIR = Nothing
+                  , compiledHoistedIR = Nothing
+                  , compiledFlattenedIR = Nothing
                   }
+
+
+finalizeDecl :: ModuleRecordShapes -> CompiledItem -> CompiledItem
+finalizeDecl _ SkippedDecl = SkippedDecl
+finalizeDecl _ (LoweringError err) = LoweringError err
+finalizeDecl shapes (Compiled compiledDecl) =
+  case compiledRecursionResult compiledDecl of
+    Left _ ->
+      Compiled compiledDecl
+    Right cpsExp ->
+      let interfaceExp = flattenModuleRecordInterfaces shapes (compiledName compiledDecl) cpsExp
+          ccExp = closureConvert interfaceExp
+          defuncExp = defunctionalize ccExp
+          hoisted = hoistQubits defuncExp
+      in Compiled compiledDecl
+           { compiledInterfaceIR = Just interfaceExp
+           , compiledClosureIR = Just ccExp
+           , compiledDefuncIR = Just defuncExp
+           , compiledHoistedIR = Just hoisted
+           , compiledFlattenedIR = Just (flattenRecords (hoistedBody hoisted))
+           }
 
 
 findEntryPoints :: [CompiledItem] -> [String]

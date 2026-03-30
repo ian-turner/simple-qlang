@@ -7,35 +7,39 @@ This note is a short handoff for the next thread.
 - local record simplification in `src/RecordFlatten.hs`
 - module-level compilation in `src/CompilePipeline.hs`
 - whole-module interface-shape inference in `src/RecordShape.hs`
+- first interface rewrite pass in `src/ModuleRecordFlatten.hs`
 
 ## What Still Blocks Completion
 
-The compiler still does not rewrite record-valued function interfaces.
+The compiler now rewrites some record-valued function and continuation
+interfaces, but it still does not flatten tuple/data-flow results that cross
+top-level continuation boundaries.
 
 That means tuple/data-flow records can still survive when they cross:
 
-- local `CFix` function boundaries
-- continuation boundaries
-- top-level declaration boundaries
+- continuation parameters supplied from another declaration
+- top-level declaration boundaries via CPS return continuations
+- any call edge whose interface shape is still inferred conservatively
 
 ## Immediate Implementation Target
 
-Add a signature-aware flattening pass that operates on the pre-closure CPS
-stored in `CompiledDecl.compiledRecursionResult`.
+Extend the shape-driven interface rewrite so it can follow continuation result
+paths across declarations.
 
-The pass should:
+The next pass should:
 
-- read inferred shapes from `CompiledModule.compiledRecordShapes`
-- rewrite `CFix` parameter lists when a parameter shape is `ShapeRecord [...]`
-- rewrite matching `CApp` argument lists in the same pass
-- rewrite uses inside affected bodies so field projections over flattened
-  parameters become direct scalar references
-- leave `ShapeOpaque` interfaces untouched
+- propagate shape information for continuation parameters that represent the
+  result interface of another declaration
+- let top-level producers such as `bell00` and top-level consumers such as
+  `output` agree on flattened continuation signatures
+- preserve the current conservative rule for `ShapeUnknown` and `ShapeOpaque`
+- keep the existing `ModuleRecordFlatten` rewrite as the execution point for
+  the actual signature transformation
 
 ## Conservative Rule
 
 Prefer not flattening to flattening the wrong thing.
 
-For now, flatten only interfaces whose shape clearly comes from tuple/data-flow
-records. Closure/defunctionalization records can remain conservative until the
-backend needs a more explicit classification pass.
+Continue flattening only interfaces whose shape clearly comes from
+tuple/data-flow records. Closure/defunctionalization records can remain
+conservative until the backend needs a more explicit classification pass.

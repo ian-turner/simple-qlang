@@ -26,8 +26,17 @@ The first two structural prerequisites from this note are now implemented:
 - module-level compilation now lives in `src/CompilePipeline.hs`
 - whole-module record-shape analysis now lives in `src/RecordShape.hs`
 
-That means the remaining work is no longer architectural setup. The next step
-is the actual signature-aware flattening rewrite.
+That means the remaining work is no longer architectural setup.
+
+Status update:
+
+- the first signature-aware flattening rewrite now exists in
+  `src/ModuleRecordFlatten.hs`
+- `src/CompilePipeline.hs` now runs that pass before closure conversion
+- `src/Main.hs` now prints an `Interface-Flattened IR` stage
+
+The remaining step is to extend that rewrite across top-level continuation
+boundaries, not to introduce the rewrite from scratch.
 
 ## Remaining Structural Changes
 
@@ -87,13 +96,18 @@ That rewrite needs to:
   references
 - rewrite continuation-style calls the same way as ordinary function calls
 
-This is the real missing piece for:
+This was the real missing piece for:
 
 - tuple results from `PCNot`
 - records passed through continuations
 - cross-declaration calls such as `bell00` consumed by `output`
 
-This is now the immediate implementation target.
+Status:
+
+- partially implemented in `src/ModuleRecordFlatten.hs`
+- verified to rewrite some local continuation interfaces and `PCNot`
+  tuple handoffs
+- not yet complete for cross-declaration continuation-result flow
 
 ### 4. Separate tuple flattening from closure-record handling
 
@@ -144,21 +158,23 @@ Status:
 
 ## Immediate Handoff
 
-The next thread should start with the signature-aware rewrite, not more
-analysis.
+The next thread should start from the landed interface rewrite and extend the
+shape analysis for cross-declaration continuation-result flow.
 
 Concretely:
 
-- consume `compiledRecordShapes` from `CompiledModule`
-- flatten record-valued function interfaces in the pre-closure CPS
-- update all corresponding `CApp` sites in the same pass
+- keep using `compiledRecordShapes` from `CompiledModule`
+- extend shape propagation so continuation parameters supplied from another
+  declaration can acquire record shape when they carry tuple/data-flow results
+- keep `src/ModuleRecordFlatten.hs` as the place that rewrites `CFix`
+  signatures and matching `CApp` sites
 - preserve parameters whose inferred shape is `ShapeOpaque`
-- treat tuple/data-flow records as flattenable first; leave closure-like
-  records conservative
+- keep tuple/data-flow records flattenable first; leave closure-like records
+  conservative
 
 ## Expected Payoff
 
-After these changes, the compiler should be able to complete the actual
+After this follow-on work, the compiler should be able to complete the actual
 required record-flattening milestone:
 
 - tuple records from quantum primitives no longer survive into backend emission

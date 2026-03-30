@@ -62,6 +62,11 @@ main = do
         Right _ -> do
           putStrLn "  ok (no recursion)"
           putStrLn $ ""
+          putStrLn "=== Interface-Flattened IR ==="
+          maybe (return ()) (\interfaceExp ->
+            putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show interfaceExp)
+            (compiledInterfaceIR compiledDecl)
+          putStrLn $ ""
           putStrLn "=== Closure-Converted IR ==="
           maybe (return ()) (\ccExp ->
             putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show ccExp)
