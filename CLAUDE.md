@@ -39,20 +39,31 @@ There is no test suite yet — verify changes by running the examples manually.
 ## Project goal
 
 FunQ is a functional quantum language with linear types that compiles to
-OpenQASM / QIR. The planned compilation pipeline (not yet implemented beyond
-scope resolution) follows Appel's *Compiling with Continuations* (1992):
+OpenQASM / QIR. The planned compilation pipeline follows Appel's *Compiling
+with Continuations* (1992). See `notes/cps-compilation-strategy.md` for the
+full pipeline with required/optional classification.
 
-1. Parse + scope resolve *(done)*
-2. Type check with linear types for qubits
-3. Lower to λ-calculus IR (Appel Ch 4)
-4. Convert to CPS (Appel Ch 5)
-5. Optimise CPS: β-contraction, η-reduction, inlining (Appel Chs 6–9)
-6. Closure conversion (Appel Ch 10)
-7. Register/qubit spilling (Appel Ch 11)
-8. Emit OpenQASM or QIR
+**Current priority**: complete all required stages end-to-end before
+introducing any optional optimizations or the linear type checker.
 
-See `notes/appel/index.md` for chapter-by-chapter notes on the pipeline,
-and `notes/cps-compilation-strategy.md` for the high-level design.
+### Required stages (in order)
+1. Parse + scope resolve — *done*
+2. Lower to λ-calculus IR (Appel Ch 4)
+3. CPS conversion (Appel Ch 5)
+4. Closure conversion (Appel Ch 10)
+5. Recursion elimination
+6. Defunctionalization
+7. Qubit hoisting
+8. Tuple/record flattening
+9. Gate/def classification
+10. Emit OpenQASM
+
+### Deferred until after the required pipeline works
+- Linear type checking (assumes well-typed, linear input for now)
+- CPS optimizations: β-contraction, η-reduction, inlining, CSE (Appel Chs 6–9)
+- Register/qubit spilling (Appel Ch 11)
+
+See `notes/appel/index.md` for the mapping of stages to Appel chapters.
 
 ---
 

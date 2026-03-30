@@ -92,78 +92,90 @@ Recursive quantum algorithms (QFT, quantum walk, etc.) use `FIX` to define mutua
 
 ## Compilation Pipeline
 
-Following Appel's compiler organization (§1.4, pp. 9–10), adapted for FunQ and the OpenQASM target:
+Following Appel's compiler organization (§1.4, pp. 9–10), adapted for FunQ and the OpenQASM target.
 
-### 1. Parse + type-check
-FunQ source → annotated AST.
-- Linear type checking ensures qubits are not cloned or discarded (no-cloning theorem)
-- This is FunQ-specific and not covered by Appel
+Each stage is marked **[required]** (needed to produce valid OpenQASM) or
+**[optional]** (improves output quality but can be skipped without affecting
+correctness). The current priority is to complete all required stages first.
 
-### 2. Lower to λ-calculus form (Chapter 4)
-- Desugar pattern matching, case expressions, data constructors
-- FunQ already has data types and case expressions
+### 1. Parse + scope resolve **[required, done]**
+FunQ source → annotated AST. Linear type checking is deferred until after the
+full OpenQASM pipeline is working; for now we assume a well-typed, linear input.
 
-### 3. Convert to CPS (Chapter 5)
+### 2. Lower to λ-calculus form **[required]** (Chapter 4)
+Desugar pattern matching, case expressions, and data constructors into a
+minimal λ-calculus-like form that the CPS conversion algorithm (Ch 5) operates
+on. FunQ already has these constructs; this pass simplifies them into the
+small set of forms Appel's converter expects.
+
+### 3. Convert to CPS **[required]** (Chapter 5)
 - Every function gains an extra continuation argument `c`
 - Returning a value `v` becomes `APP(c, [v])`
 - Measurement becomes `PRIMOP(measure, ...)` with two continuations
-- See §5.4 (function calls) and §5.7 (case statements) for the conversion rules
 
-### 4. Optimize CPS (Chapters 6–9)
-- Constant folding and β-contraction (§6.1): inline trivial continuations
-- Eta reduction (§6.2): eliminate redundant continuation wrappers
-- Common subexpression elimination (Chapter 9): deduplicate classical computations
+### 4. Closure conversion **[required]** (Chapter 10)
+Eliminate all free variables. Every `FIX`-bound function becomes a closed
+value; its free variables are bundled into an explicit closure record passed
+as an extra argument. After this pass the program is one flat top-level `FIX`
+with no nested scopes — a prerequisite for all subsequent passes.
 
-### 5. Closure conversion (Chapter 10)
-Eliminate all free variables from functions. Every `FIX`-bound function becomes a closed value; its environment is passed as an explicit extra argument. Required before the remaining passes, which operate on closed terms.
+### 5. Recursion elimination **[required]**
+**OpenQASM has no general recursion.** All recursive `FIX` bodies must be
+eliminated before emission. Two cases:
 
-### 6. Recursion elimination
-**OpenQASM has no general recursion.** All recursive `FIX` bodies must be eliminated before emission. Two cases:
-
-- **Statically bounded recursion**: if the recursion depth is a compile-time constant or an `input` parameter, unroll or lower to an OpenQASM `for` loop:
+- **Statically bounded recursion**: unroll or lower to an OpenQASM `for` loop:
   ```openqasm
   for int i in [0:1:n-1] { body }
   ```
-- **Unbounded recursion**: a **compile-time error**. FunQ programs with unbounded recursion cannot be compiled to OpenQASM. The programmer must supply a bound (e.g., via a type-level or expression-level annotation) or restructure the algorithm.
+- **Unbounded recursion**: a **compile-time error**. The programmer must
+  supply a bound or restructure the algorithm.
 
-Recursion elimination is done before defunctionalization because unrolling may eliminate some higher-order function uses.
+Recursion elimination is done before defunctionalization because unrolling
+may eliminate some higher-order function uses.
 
-### 7. Defunctionalization
-**OpenQASM has no function values.** Closure conversion eliminates free variables but still produces closures as first-class data. Defunctionalization (Reynolds-style) converts all remaining higher-order functions into tagged data + a top-level dispatch function, eliminating function values entirely.
+### 6. Defunctionalization **[required]**
+**OpenQASM has no function values.** After closure conversion, closures are
+still first-class data. Defunctionalization (Reynolds-style) converts all
+remaining higher-order functions into tagged data + a top-level dispatch
+function, eliminating function values entirely.
 
-This is required for FunQ programs that pass functions as arguments — e.g.:
+Required for programs that pass functions as arguments — e.g.:
 ```funq
 cctrl g = \a phi -> if a then g phi else phi
 ```
-Here `g` is a function-valued argument. After defunctionalization, `g` becomes a tag (an integer or constructor), and the dispatch function performs the appropriate gate call based on the tag.
+After defunctionalization, `g` becomes a tag (an integer or constructor) and
+the dispatch function performs the appropriate gate call based on the tag.
 
-### 8. Qubit hoisting
-**OpenQASM requires all qubit declarations at top-level scope** — they are not allowed inside subroutines or conditional branches. FunQ's `init()` creates qubits dynamically inside expressions.
+### 7. Qubit hoisting **[required]**
+**OpenQASM requires all qubit declarations at top-level scope.**
+FunQ's `init()` creates qubits dynamically inside expressions.
 
 This pass:
 1. Statically counts all qubit allocations in the program
 2. Emits `qubit q_i;` declarations at program scope
-3. Replaces each `PRIMOP(init, [], [q], [E])` with a `reset q_i;` statement that reuses the pre-declared qubit
+3. Replaces each `PRIMOP(init, [], [q], [E])` with a `reset q_i;` reusing the pre-declared qubit
 
-### 9. Tuple flattening
-**OpenQASM has no tuple type.** The CPS IR uses `RECORD`/`SELECT` for tuple construction and projection (e.g., qubit pairs returned from two-qubit gates like `cnot`). This pass replaces every tuple with a set of individual scalar variables and rewrites all `SELECT` projections as direct variable references.
+### 8. Tuple/record flattening **[required]**
+**OpenQASM has no tuple type.** The CPS IR uses `RECORD`/`SELECT` for tuples
+(e.g., qubit pairs from `cnot`). This pass replaces each tuple with individual
+scalar variables and rewrites all `SELECT` projections as direct variable references.
 
-### 10. Gate/def classification
-Before emission, classify each closed `FIX`-bound function as either a `gate` or a `def`:
+### 9. Gate/def classification **[required]**
+Classify each closed `FIX`-bound function as `gate` or `def` before emission:
 
-- **`gate`**: the body contains only gate applications (no measurement, no classical variables, no classical control flow). Parameters are angles only. Use this for pure unitary operations:
+- **`gate`**: body contains only gate applications — no measurement, no classical
+  control flow. Emitted as an OpenQASM `gate` definition.
   ```openqasm
   gate my_gate(theta) q { U(theta, 0, 0) q; }
   ```
-- **`def`**: the body contains measurement, classical control flow, or classical variables. Takes qubits by reference and can return a classical value:
+- **`def`**: body contains measurement or classical control flow. Emitted as
+  an OpenQASM `def`.
   ```openqasm
   def xmeasure(qubit q) -> bit { H q; return measure q; }
   ```
 
-This classification is a concrete analysis step: traverse the body and check for `PRIMOP(measure,...)` or `SWITCH` nodes. If any are present, emit `def`; otherwise emit `gate`.
-
-### 11. Emit OpenQASM
-After the preceding passes the CPS expression is a flat graph of tail calls with no free variables, no function values, no tuples, and all qubits globally declared. Emission is a structural translation:
+### 10. Emit OpenQASM **[required]**
+Structural translation from the flat, closed, recursion-free CPS:
 
 | CPS | OpenQASM |
 |---|---|
@@ -175,7 +187,27 @@ After the preceding passes the CPS expression is a flat graph of tail calls with
 | Top-level `output` binding | `output` declaration |
 | Classical `PRIMOP(+, ...)` etc. | arithmetic expression |
 
-Type sizing for emission: FunQ's `Int` → `int[32]`, `Float` → `float[64]`, `Bool` → `bool`.
+Type sizing: FunQ's `Int` → `int[32]`, `Float` → `float[64]`, `Bool` → `bool`.
+
+---
+
+## Optional Optimizations (post-pipeline)
+
+These improve output quality but are not required for correctness. Implement
+after the required pipeline is working end-to-end.
+
+| Pass | Appel | Benefit |
+|---|---|---|
+| β-contraction + constant folding | Ch 6 §6.1 | Eliminates trivial CPS wrappers introduced during conversion; reduces output verbosity significantly |
+| η-reduction | Ch 6 §6.2 | Removes redundant continuation wrappers |
+| Beta expansion (inlining) | Ch 7 | Inlines small quantum subroutines; reduces `def` call overhead |
+| Hoisting | Ch 8 | Lifts `FIX` definitions; improves code structure |
+| Common subexpression elimination | Ch 9 | Deduplicates classical sub-computations |
+| Register spilling | Ch 11 | Only needed if live qubit count exceeds hardware limit; classical variables spill to heap records |
+
+Note: β-contraction must respect linearity — a qubit-valued binding may not be
+inlined at more than one use site. This check is straightforward once the
+linear type checker is in place.
 
 ---
 
@@ -191,7 +223,7 @@ Type sizing for emission: FunQ's `Int` → `int[32]`, `Float` → `float[64]`, `
 | No qubit allocation constraints | All qubits must be **hoisted to top-level scope** |
 | Tuples are a natural IR construct | **No tuple type** — must flatten before emit |
 
-The linearity constraint (no-cloning) means the optimizer must not beta-expand qubit-valued expressions more than once. This requires a linearity check during the optimization passes in step 4.
+The linearity constraint (no-cloning) means the optimizer must not beta-expand qubit-valued expressions more than once. This will require a linearity check when the optional optimization passes are implemented.
 
 ---
 
