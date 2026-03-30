@@ -71,7 +71,9 @@ continuation expressions `conts`. The number of continuations depends on `op`:
 - Arithmetic/gate ops: one continuation (pure sequencing)
 - Comparison ops (`>`, `<`, etc.): two continuations — true branch, false branch
   - Example: `PRIMOP(>, [VAR a, VAR b], [], [F, G])` — zero result vars, two continuations
-- **Measurement**: two continuations — `|0⟩` branch, `|1⟩` branch
+- **Measurement**: two continuations — `|0⟩` branch, `|1⟩` branch. In FunQ,
+  measurement also consumes the input qubit; the qubit does not remain
+  available after `meas`
 
 ### Atomicity invariant (p. 13)
 
@@ -154,7 +156,8 @@ data CExp
 ```
 
 `PMeas` is always used with exactly two `CExp` continuations in the `[CExp]`
-list of `CPrimOp`. All gate `PrimOp`s use exactly one.
+list of `CPrimOp`. All gate `PrimOp`s use exactly one. Semantically, `PMeas`
+consumes its qubit operand and yields only classical control.
 
 ### Example: measurement with two continuations
 

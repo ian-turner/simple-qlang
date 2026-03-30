@@ -32,6 +32,23 @@ The pipeline's closure-conversion phase produces a CPS expression where every fu
 
 ---
 
+## Backend Boundary
+
+OpenQASM is the only active backend for now, but the pipeline should remain as
+target-neutral as possible until the final lowering stages. In particular:
+
+- Parsing, lowering to Lambda IR, CPS conversion, recursion handling, closure
+  conversion, and defunctionalization are **backend-independent middle-end
+  passes**
+- OpenQASM-specific constraints should be introduced as late as possible
+- Backend-specific passes begin with target lowering decisions such as qubit
+  declaration strategy, `gate` vs `def` classification, and final emission
+
+This keeps the IR useful for future backends such as QIR without forcing the
+front half of the compiler to track OpenQASM-specific surface restrictions.
+
+---
+
 ## The CPS Datatype (§2.1, pp. 11–15)
 
 Appel defines a concrete ML datatype `cexp` as the IR. The constructors relevant to FunQ are:
@@ -63,7 +80,15 @@ This mirrors Appel's arithmetic example (§2.1, p. 13): `a + b` yielding `c`, co
 
 ### Measurement → `PRIMOP` with two continuations
 
-Measurement is the crucial case. Unlike a gate, measurement is **non-deterministic**: it produces a classical bit and branches on the outcome. This maps directly to `PRIMOP` with two continuation expressions (§2.1, p. 13, the `>` comparison example):
+Measurement is the crucial case. Unlike a gate, measurement is
+**non-deterministic**: it produces a classical bit and branches on the
+outcome. Measurement also **consumes** its qubit operand: after `meas q`, the
+qubit `q` is no longer available to the program. The surface type remains
+`Qubit -> Bool`, but the consuming behaviour is part of the language's linear
+semantics and must be enforced by the future type checker.
+
+This maps directly to `PRIMOP` with two continuation expressions (§2.1, p. 13,
+the `>` comparison example):
 
 ```
 PRIMOP(measure, [VAR q], [], [E_zero, E_one])
@@ -92,7 +117,9 @@ Recursive quantum algorithms (QFT, quantum walk, etc.) use `FIX` to define mutua
 
 ## Compilation Pipeline
 
-Following Appel's compiler organization (§1.4, pp. 9–10), adapted for FunQ and the OpenQASM target.
+Following Appel's compiler organization (§1.4, pp. 9–10), adapted for FunQ and
+currently lowered to OpenQASM. Stages 1–6 are intended to remain largely
+backend-neutral; later stages capture backend-specific constraints.
 
 Each stage is marked **[required]** (needed to produce valid OpenQASM) or
 **[optional]** (improves output quality but can be skipped without affecting
@@ -121,13 +148,7 @@ Implemented in `src/LambdaIR.hs` (the `LExp` datatype) and `src/Lower.hs`
 - Returning a value `v` becomes `APP(c, [v])`
 - Measurement becomes `PRIMOP(measure, ...)` with two continuations
 
-### 4. Closure conversion **[required, done]** (Chapter 10)
-Eliminate all free variables. Every `FIX`-bound function becomes a closed
-value; its free variables are bundled into an explicit closure record passed
-as an extra argument. After this pass the program is one flat top-level `FIX`
-with no nested scopes — a prerequisite for all subsequent passes.
-
-### 5. Recursion elimination **[required, done]**
+### 4. Recursion elimination **[required, done]**
 **OpenQASM has no general recursion.** All recursive `FIX` bodies must be
 eliminated before emission. Two cases:
 
@@ -138,19 +159,28 @@ eliminated before emission. Two cases:
 - **Unbounded recursion**: a **compile-time error**. The programmer must
   supply a bound or restructure the algorithm.
 
-Recursion elimination is done before defunctionalization because unrolling
-may eliminate some higher-order function uses.
+This pass runs on CPS **before closure conversion**. That ordering is
+intentional: recursive calls are still direct `CApp (VVar f) args` nodes with
+`f` bound in the enclosing `CFix`, so recursion is easy to detect and, later,
+will be the simplest place to implement bounded unrolling. After closure
+conversion, the same call is rewritten through closure records and code-pointer
+selection, which obscures direct self/sibling calls and makes the analysis
+substantially more complex without helping the current backend.
 
 Implemented in `src/RecElim.hs` (`elimRecursion :: CExp -> Either String CExp`).
-The pass runs on the CPS expression **before** closure conversion, where
-recursive calls are directly visible as `CApp (VVar f) args` with `f` bound
-in the enclosing `CFix`.  Detection: for each `CFix` group, intersect the
-bound names with the set of callee variables found anywhere in the function
-bodies; a non-empty intersection is a compile-time error.
+Detection: for each `CFix` group, intersect the bound names with the set of
+callee variables found anywhere in the function bodies; a non-empty
+intersection is a compile-time error.
 
 Current status: detection and error reporting are complete.  Unrolling of
 bounded recursion (the `for`-loop path) is deferred until after the full
 pipeline is validated end-to-end.
+
+### 5. Closure conversion **[required, done]** (Chapter 10)
+Eliminate all free variables. Every `FIX`-bound function becomes a closed
+value; its free variables are bundled into an explicit closure record passed
+as an extra argument. After this pass the program is one flat top-level `FIX`
+with no nested scopes — a prerequisite for all subsequent passes.
 
 ### 6. Defunctionalization **[required]**
 **OpenQASM has no function values.** After closure conversion, closures are
@@ -172,7 +202,12 @@ FunQ's `init()` creates qubits dynamically inside expressions.
 This pass:
 1. Statically counts all qubit allocations in the program
 2. Emits `qubit q_i;` declarations at program scope
-3. Replaces each `PRIMOP(init, [], [q], [E])` with a `reset q_i;` reusing the pre-declared qubit
+3. Replaces each `PRIMOP(init, [], [q], [E])` with the statically assigned
+   slot `q_i`, inserting `reset q_i;` as needed by the backend representation
+
+Initial policy: **one slot per `init`**. This first version does not perform
+liveness-based qubit reuse. A later optimisation pass may recycle slots once
+qubit lifetimes are analysed precisely.
 
 ### 8. Tuple/record flattening **[required]**
 **OpenQASM has no tuple type.** The CPS IR uses `RECORD`/`SELECT` for tuples

@@ -21,13 +21,13 @@ See also `../cps-compilation-strategy.md` for the high-level strategy document.
 | 4c | Beta expansion (inlining) | Ch 7 |
 | 4d | Hoisting | Ch 8 |
 | 4e | Common subexpression elimination | Ch 9 |
-| 5 ✓ | Closure conversion (eliminate free variables) | Ch 10 |
-| 5b ✓ | Recursion elimination (error on recursion; unrolling deferred) | FunQ-specific |
-| 6 | Register spilling (bound free-variable count) | Ch 11 |
-| 7 | Emit OpenQASM / QIR | Replaces Chs 13–14 (abstract machine + codegen) |
+| 5 ✓ | Recursion elimination (pre-closure-conv check; unrolling deferred) | FunQ-specific |
+| 6 ✓ | Closure conversion (eliminate free variables) | Ch 10 |
+| 7 | Register spilling (bound free-variable count) | Ch 11 |
+| 8 | Emit OpenQASM / QIR | Replaces Chs 13–14 (abstract machine + codegen) |
 
-Stages 1–6 follow Appel directly (with quantum-specific modifications noted in
-each chapter file). Stage 7 replaces Appel's classical backend: instead of
+Stages 1–7 follow Appel directly or with small quantum-specific modifications
+noted in each chapter file. Stage 8 replaces Appel's classical backend: instead of
 emitting VAX/MIPS/SPARC assembly, we emit OpenQASM gate sequences or QIR LLVM IR.
 
 ---
