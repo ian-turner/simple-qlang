@@ -9,6 +9,7 @@ import Text.Parsec
 import Parser
 import Resolve
 import TopMonad
+import Lower (lowerDecl, runLower)
 
 
 parserIO :: Either ParseError a -> IO a
@@ -20,19 +21,29 @@ main = do
   args <- getArgs
   case args of
     [] -> error "Please provide input filename"
-    (srcName : args) -> do
-      -- Reading file contents
+    (srcName : _) -> do
+      -- Parsing
       fileContents <- readFile srcName
-      -- Parsing file into declarations
       (decls, _) <- parserIO $ parseModule srcName fileContents initialParserState
-      -- Resolving concrete syntax into abstract syntax
-      (decls', st) <- runTop $ resolution decls
-      putStrLn $ show decls'
-    where
-      resolution [] = return []
-      resolution (d:ds) = do
-        sc <- getScope
-        (d', sc') <- scopeTop $ resolveDecl sc d
-        putScope sc'
-        ds' <- resolution ds
-        return (d':ds')
+      -- Scope resolution
+      (result, _) <- runTop $ resolution decls
+      case result of
+        Left err    -> error $ show err
+        Right decls' -> do
+          -- Lambda IR lowering
+          putStrLn "=== Lambda IR ==="
+          mapM_ printLowered decls'
+  where
+    resolution [] = return []
+    resolution (d:ds) = do
+      sc <- getScope
+      (d', sc') <- scopeTop $ resolveDecl sc d
+      putScope sc'
+      ds' <- resolution ds
+      return (d':ds')
+
+    printLowered d =
+      case runLower (lowerDecl d) of
+        Left err        -> putStrLn $ "  error: " ++ err
+        Right Nothing   -> return ()
+        Right (Just (name, lexp)) -> putStrLn $ "  " ++ name ++ " = " ++ show lexp
