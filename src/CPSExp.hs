@@ -25,8 +25,7 @@ data Value
 -- Invariants:
 --   - All arguments to every constructor are atomic Values.
 --   - CApp has no continuation subexpression — every call is a tail call.
---   - CPrimOp PMeas always has exactly two continuation expressions.
---   - All other CPrimOp have exactly one continuation expression.
+--   - Every CPrimOp continuation list currently has exactly one expression.
 data CExp
   = CRecord  [(Value, AccessPath)] Variable CExp
     -- ^ Allocate a heap record, bind address to Variable, continue.
@@ -43,8 +42,8 @@ data CExp
     -- ^ Primitive operation.
     --   [Value]    — argument values
     --   [Variable] — result variables bound in the continuation(s)
-    --   [CExp]     — continuation expression(s):
-    --                  one for pure/gate ops, two for PMeas
+    --   [CExp]     — continuation expression(s), currently one expression
+    --                for all primops including measurement
   | COffset  Int Value Variable CExp
     -- ^ Interior pointer into a heap record.
     --   Bind (base + n words) to Variable, continue.

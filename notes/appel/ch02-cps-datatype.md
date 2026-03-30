@@ -71,9 +71,10 @@ continuation expressions `conts`. The number of continuations depends on `op`:
 - Arithmetic/gate ops: one continuation (pure sequencing)
 - Comparison ops (`>`, `<`, etc.): two continuations — true branch, false branch
   - Example: `PRIMOP(>, [VAR a, VAR b], [], [F, G])` — zero result vars, two continuations
-- **Measurement**: two continuations — `|0⟩` branch, `|1⟩` branch. In FunQ,
-  measurement also consumes the input qubit; the qubit does not remain
-  available after `meas`
+- In Appel-style CPS, some primops can branch directly via multiple
+  continuations. In current FunQ, measurement instead uses one result variable
+  and one continuation; later `SWITCH` nodes handle branching on the measured
+  classical value. Measurement still consumes the input qubit.
 
 ### Atomicity invariant (p. 13)
 
@@ -143,7 +144,7 @@ data PrimOp
   | PInit                -- init : Unit -> Qubit
   | PHGate               -- hgate : Qubit -> Qubit
   | PCNot                -- cnot  : (Qubit, Qubit) -> (Qubit, Qubit)
-  -- Measurement (two continuations: |0>, |1>)
+  -- Measurement (single classical result in current FunQ)
   | PMeas                -- meas  : Qubit -> Bool
 
 data CExp
@@ -155,16 +156,15 @@ data CExp
   | CPrimOp  PrimOp [Value] [Var] [CExp]    -- primitive op with continuations
 ```
 
-`PMeas` is always used with exactly two `CExp` continuations in the `[CExp]`
-list of `CPrimOp`. All gate `PrimOp`s use exactly one. Semantically, `PMeas`
-consumes its qubit operand and yields only classical control.
+In current FunQ lowering, `PMeas` is used with one result variable and one
+`CExp` continuation, like the other single-result primops. Semantically,
+`PMeas` consumes its qubit operand and yields a classical measurement result.
 
-### Example: measurement with two continuations
+### Example: measurement as a single-result primop
 
 ```
-PRIMOP(meas, [VAR q], [],
-  [ (* |0> branch *) APP(VAR k, [BOOL False]),
-    (* |1> branch *) APP(VAR k, [BOOL True]) ])
+PRIMOP(meas, [VAR q], [b],
+  [ APP(VAR k, [VAR b]) ])
 ```
 
 ---

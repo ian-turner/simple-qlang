@@ -99,18 +99,13 @@ toCPS (LPrim op args)     c = toCPSPrim op args c
 
 toCPSPrim :: PrimOp -> [LExp] -> Kont -> CExp
 
--- PMeas: category 3 — branches into two continuations (|0⟩ and |1⟩).
--- FIX-wraps c so the continuation body is generated exactly once.
---   F(meas e, c) = F(e, λv. FIX [(k,[x], c(x))]
---                            PRIMOP(PMeas,[v],[],[APP(k,[0]), APP(k,[1])]))
+-- PMeas: treat measurement like an ordinary single-result primop.
+-- The result is the classical Bool/bit value; later CSwitch nodes handle any
+-- branching needed on that value.
 toCPSPrim PMeas args c =
   toCPSList args $ \vs ->
-    freshNames ["k", "x"] $ \[k, x] ->
-      CFix [(k, [x], c (VVar x))]
-           (CPrimOp PMeas vs []
-             [ CApp (VVar k) [VInt 0]   -- |0⟩ outcome
-             , CApp (VVar k) [VInt 1]   -- |1⟩ outcome
-             ])
+    freshNames ["w"] $ \[w] ->
+      CPrimOp PMeas vs [w] [c (VVar w)]
 
 -- PCNot: two output qubits — bind both, then pack into a record so that
 -- the continuation c receives a single Value (the record address).

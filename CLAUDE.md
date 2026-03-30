@@ -97,9 +97,9 @@ These affect every phase of the compiler and must not be violated:
 - **No qubit spilling to memory**: qubits cannot be stored in heap records and
   reloaded. The spill phase applies only to classical (Bool/Int) variables;
   qubit width must be checked statically.
-- **Measurement is branching**: `meas` produces two continuations in CPS
-  (`|0⟩` branch and `|1⟩` branch), not a single result, analogous to a
-  two-way `PRIMOP` in Appel's notation.
+- **Measurement produces a classical result**: `meas` lowers to a single-result
+  CPS `PRIMOP` whose continuation receives a `Bool`-like classical value.
+  Any later branching on that value is represented explicitly with `CSwitch`.
 
 ---
 

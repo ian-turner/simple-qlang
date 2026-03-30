@@ -35,7 +35,7 @@ data ClassicalRep
 
 data Stmt
   = StmtGate String [Int]
-  | StmtMeasure String Int [Stmt] [Stmt]
+  | StmtMeasure String Int
   | StmtAssign String String
   | StmtDeclareAssign String String String
   | StmtSwitch String [(Int, [Stmt])]
@@ -494,16 +494,11 @@ runDirectPrimOp moduleEnv env PCNot [ValueQubit q0, ValueQubit q1] [r0, r1] [con
   where
     env' =
       Map.insert r1 (ValueQubit q1) (Map.insert r0 (ValueQubit q0) env)
-runDirectPrimOp moduleEnv env PMeas [ValueQubit q] [] [zeroCont, oneCont] haltK = do
+runDirectPrimOp moduleEnv env PMeas [ValueQubit q] [result] [cont] haltK = do
   bitName <- freshBitName
-  zeroResult <- runExp moduleEnv env zeroCont haltK
-  oneResult <- runExp moduleEnv env oneCont haltK
-  pure
-    EmitResult
-      { resultStmts =
-          [StmtMeasure bitName q (resultStmts zeroResult) (resultStmts oneResult)]
-      , resultValue = resultValue zeroResult
-      }
+  let env' = Map.insert result (ValueClassical (ClassicalVar bitName)) env
+  emitted <- runExp moduleEnv env' cont haltK
+  pure emitted { resultStmts = StmtMeasure bitName q : resultStmts emitted }
 runDirectPrimOp moduleEnv env op args [result] [cont] haltK
   | isClassicalPrim op = do
       tempName <- freshTempName
@@ -550,6 +545,10 @@ runPrimitiveExecution moduleEnv PZGate [ValueQubit q] cont haltK = do
 runPrimitiveExecution moduleEnv PCNot [ValueQubit q0, ValueQubit q1] cont haltK = do
   emitted <- applyCallable moduleEnv cont [ValueQubit q0, ValueQubit q1] haltK
   pure emitted { resultStmts = StmtGate "cx" [q0, q1] : resultStmts emitted }
+runPrimitiveExecution moduleEnv PMeas [ValueQubit q] cont haltK = do
+  bitName <- freshBitName
+  emitted <- applyCallable moduleEnv cont [ValueClassical (ClassicalVar bitName)] haltK
+  pure emitted { resultStmts = StmtMeasure bitName q : resultStmts emitted }
 runPrimitiveExecution _ op _ _ _ =
   lift $
     Left
@@ -682,14 +681,8 @@ renderStmt indentLevel (StmtGate gateName [q]) =
   [indent indentLevel ++ gateName ++ " q[" ++ show q ++ "];"]
 renderStmt indentLevel (StmtGate gateName [q0, q1]) =
   [indent indentLevel ++ gateName ++ " q[" ++ show q0 ++ "], q[" ++ show q1 ++ "];"]
-renderStmt indentLevel (StmtMeasure bitName q zeroStmts oneStmts) =
-  [ indent indentLevel ++ "bit " ++ bitName ++ " = measure q[" ++ show q ++ "];"
-  , indent indentLevel ++ "if (" ++ bitName ++ " == 0) {"
-  ]
-    ++ concatMap (renderStmt (indentLevel + 1)) zeroStmts
-    ++ [indent indentLevel ++ "} else {"]
-    ++ concatMap (renderStmt (indentLevel + 1)) oneStmts
-    ++ [indent indentLevel ++ "}"]
+renderStmt indentLevel (StmtMeasure bitName q) =
+  [indent indentLevel ++ "bit " ++ bitName ++ " = measure q[" ++ show q ++ "];"]
 renderStmt indentLevel (StmtAssign name valueExpr) =
   [indent indentLevel ++ name ++ " = " ++ valueExpr ++ ";"]
 renderStmt indentLevel (StmtDeclareAssign declType name valueExpr) =

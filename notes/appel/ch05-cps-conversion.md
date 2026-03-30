@@ -150,19 +150,21 @@ F(L.APP(L.PRIM i, E), c) =
 The FIX names the continuation `k` so that its body (`c(VAR x)`) is generated
 only once. Both branches call `k` with 1 or 0 respectively.
 
-**FunQ mapping:** `LPrim PMeas [e]` is the only category 3 primop in FunQ.
-The two branches correspond to |0⟩ and |1⟩ outcomes. The measurement rule:
+This is the textbook Appel pattern for branching primops. FunQ originally
+followed this shape for measurement, but the current implementation does not.
+
+**Current FunQ mapping:** `LPrim PMeas [e]` lowers as an ordinary single-result
+primop so the measured bit can flow forward without forcing immediate backend
+branch duplication. The measurement rule is:
 
 ```
 F(LPrim PMeas [e], c) =
-  F(e, λv.FIX([(k, [x], c(VVar x))],
-       CPrimOp PMeas [v] [] [ CApp (VVar k) [VInt 0],  -- |0⟩ outcome
-                              CApp (VVar k) [VInt 1] ] -- |1⟩ outcome
-       ))
+  F(e, λv.
+       CPrimOp PMeas [v] [w] [c(VVar w)])
 ```
 
-This is the **single most important FunQ-specific case**: measurement always
-generates a FIX-wrapped branching PRIMOP, never duplicated inline code.
+Branching on the measured result is represented later through ordinary `SWITCH`
+nodes over that classical value.
 
 ### Category 4 — callcc and throw
 
@@ -357,14 +359,10 @@ cpsConvert (LPrim op args)   c   -- op ∉ {PMeas}
       let w = fresh
       in CPrimOp op vs [w] [c (VVar w)]
 
--- Category 3 primop: measurement branches into two continuations
+-- Measurement in current FunQ: one result, one continuation
 cpsConvert (LPrim PMeas [e]) c = cpsConvert e $ \v ->
-  let k = fresh
-      x = fresh
-  in CFix [(k, [x], c (VVar x))]
-          (CPrimOp PMeas [v] []
-            [ CApp (VVar k) [VInt 0],   -- |0⟩ outcome
-              CApp (VVar k) [VInt 1] ]) -- |1⟩ outcome
+  let w = fresh
+  in CPrimOp PMeas [v] [w] [c (VVar w)]
 
 cpsConvert (LSwitch scrut arms def) c = cpsConvert scrut $ \v ->
   CSwitch v [cpsConvert body c | (_, body) <- arms]
@@ -386,24 +384,20 @@ cpsConvertList (e:es) c = cpsConvert e $ \v ->
 
 ---
 
-## Worked Example: `meas` Branching
+## Worked Example: `meas`
 
 Source (after lowering): `LPrim PMeas [LVar q]`
 
-Applying the category-3 rule with continuation `c`:
+Applying the current FunQ rule with continuation `c`:
 
 ```
-CFix [(k, [x], c(VVar x))],
-  CPrimOp PMeas [VVar q] []
-    [ CApp (VVar k) [VInt 0],   -- |0⟩ branch
-      CApp (VVar k) [VInt 1] ]  -- |1⟩ branch
+CPrimOp PMeas [VVar q] [w]
+  [ c(VVar w) ]
 ```
 
-Crucially, `c` is evaluated **once** to form the body of `k`. The FIX wrapper
-means the continuation code is not duplicated regardless of how large `c` is.
-When the measurement result is 0, the left branch fires; when 1, the right.
-The integer 0/1 flows into `x` and then into `c`, where it represents the
-classical measurement outcome.
+The measured classical bit flows into `w` and then into `c`. If the source
+program later branches on that result, CPS lowering represents that explicitly
+with `CSwitch` over `w`.
 
 ---
 

@@ -78,27 +78,26 @@ PRIMOP(H, [VAR q], [q'], [E])
 
 This mirrors Appel's arithmetic example (§2.1, p. 13): `a + b` yielding `c`, continuing with `E`, is `PRIMOP(+, [VAR a, VAR b], [c], [E])`.
 
-### Measurement → `PRIMOP` with two continuations
+### Measurement → single-result `PRIMOP`
 
 Measurement is the crucial case. Unlike a gate, measurement is
-**non-deterministic**: it produces a classical bit and branches on the
-outcome. Measurement also **consumes** its qubit operand: after `meas q`, the
-qubit `q` is no longer available to the program. The surface type remains
-`Qubit -> Bool`, but the consuming behaviour is part of the language's linear
-semantics and must be enforced by the future type checker.
-
-This maps directly to `PRIMOP` with two continuation expressions (§2.1, p. 13,
-the `>` comparison example):
+**non-deterministic**: it produces a classical bit. Measurement also
+**consumes** its qubit operand: after `meas q`, the qubit `q` is no longer
+available to the program. The surface type remains `Qubit -> Bool`, and the
+current CPS lowering now preserves that directly by treating measurement as an
+ordinary single-result primitive:
 
 ```
-PRIMOP(measure, [VAR q], [], [E_zero, E_one])
+PRIMOP(measure, [VAR q], [b], [E])
 ```
 
-`E_zero` and `E_one` are the continuations for the `|0⟩` and `|1⟩` outcomes respectively. In OpenQASM this becomes:
+Here `b` is the measured classical result passed into continuation `E`. Any
+later branching on that result is expressed explicitly through `SWITCH`, which
+avoids forcing an OpenQASM branch at every measurement site. In OpenQASM this
+becomes:
 
 ```openqasm
 bit c = measure q;
-if (c) { E_one } else { E_zero }
 ```
 
 ### Classical control flow → `SWITCH`
@@ -146,7 +145,8 @@ Implemented in `src/LambdaIR.hs` (the `LExp` datatype) and `src/Lower.hs`
 ### 3. Convert to CPS **[required, done]** (Chapter 5)
 - Every function gains an extra continuation argument `c`
 - Returning a value `v` becomes `APP(c, [v])`
-- Measurement becomes `PRIMOP(measure, ...)` with two continuations
+- Measurement becomes `PRIMOP(measure, ...)` with one classical result and one
+  continuation
 
 ### 4. Recursion elimination **[required, done]**
 **OpenQASM has no general recursion.** All recursive `FIX` bodies must be
@@ -419,7 +419,9 @@ result[1] = c1;
 ### Key Observations
 
 - **Gate `PRIMOP`**: one continuation — pure sequencing, no branching
-- **Measurement `PRIMOP`**: two continuations — maps to `bit c = measure q; if (c) { ... } else { ... }`
+- **Measurement `PRIMOP`**: one classical result and one continuation —
+  maps to `bit c = measure q;`, with later `SWITCH` nodes providing any needed
+  classical branching
 - **Nesting depth** of continuations directly encodes circuit depth and qubit liveness
 - **No stack**: every call is a tail call (`APP`), so after all passes the CPS expression is a flat sequence of OpenQASM statements
 
