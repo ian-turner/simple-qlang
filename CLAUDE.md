@@ -11,8 +11,9 @@ cabal build                              # build the compiler
 cabal run funq -- examples/bell00.funq  # run on a source file
 ```
 
-The compiler currently prints the resolved abstract syntax tree to stdout.
-There is no test suite yet — verify changes by running the examples manually.
+The compiler runs the full pipeline through closure conversion and prints each
+IR stage to stdout.  There is no test suite yet — verify changes by running
+the examples manually.
 
 ---
 
@@ -26,7 +27,13 @@ There is no test suite yet — verify changes by running the examples manually.
 | `Syntax.hs` | Abstract syntax tree using the `nominal` library for alpha-equivalence |
 | `TopMonad.hs` | Top-level compilation monad (error handling, state threading) |
 | `Utils.hs` | Shared utilities |
-| `Main.hs` | Orchestrates parse → resolve → print |
+| `LambdaIR.hs` | Lambda IR datatype (`LExp`) — intermediate between AST and CPS |
+| `Lower.hs` | Lowers resolved AST to `LExp` |
+| `CPSExp.hs` | CPS IR datatype (`CExp`, `Value`, `AccessPath`) |
+| `ToCPS.hs` | CPS conversion: `LExp` → `CExp` (Appel Ch 5) |
+| `RecElim.hs` | Recursion check: errors on recursive `CFix` groups |
+| `ClosureConv.hs` | Closure conversion: eliminates free variables (Appel Ch 10) |
+| `Main.hs` | Orchestrates the full pipeline; prints each IR stage |
 
 ## Key dependencies
 
@@ -48,10 +55,10 @@ introducing any optional optimizations or the linear type checker.
 
 ### Required stages (in order)
 1. Parse + scope resolve — *done*
-2. Lower to λ-calculus IR (Appel Ch 4)
-3. CPS conversion (Appel Ch 5)
-4. Closure conversion (Appel Ch 10)
-5. Recursion elimination
+2. Lower to λ-calculus IR (Appel Ch 4) — *done*
+3. CPS conversion (Appel Ch 5) — *done*
+4. Closure conversion (Appel Ch 10) — *done*
+5. Recursion elimination — *done* (errors on recursive programs; unrolling deferred)
 6. Defunctionalization
 7. Qubit hoisting
 8. Tuple/record flattening

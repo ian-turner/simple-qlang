@@ -127,7 +127,7 @@ value; its free variables are bundled into an explicit closure record passed
 as an extra argument. After this pass the program is one flat top-level `FIX`
 with no nested scopes — a prerequisite for all subsequent passes.
 
-### 5. Recursion elimination **[required]**
+### 5. Recursion elimination **[required, done]**
 **OpenQASM has no general recursion.** All recursive `FIX` bodies must be
 eliminated before emission. Two cases:
 
@@ -140,6 +140,17 @@ eliminated before emission. Two cases:
 
 Recursion elimination is done before defunctionalization because unrolling
 may eliminate some higher-order function uses.
+
+Implemented in `src/RecElim.hs` (`elimRecursion :: CExp -> Either String CExp`).
+The pass runs on the CPS expression **before** closure conversion, where
+recursive calls are directly visible as `CApp (VVar f) args` with `f` bound
+in the enclosing `CFix`.  Detection: for each `CFix` group, intersect the
+bound names with the set of callee variables found anywhere in the function
+bodies; a non-empty intersection is a compile-time error.
+
+Current status: detection and error reporting are complete.  Unrolling of
+bounded recursion (the `for`-loop path) is deferred until after the full
+pipeline is validated end-to-end.
 
 ### 6. Defunctionalization **[required]**
 **OpenQASM has no function values.** After closure conversion, closures are

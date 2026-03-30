@@ -22,6 +22,7 @@ See also `../cps-compilation-strategy.md` for the high-level strategy document.
 | 4d | Hoisting | Ch 8 |
 | 4e | Common subexpression elimination | Ch 9 |
 | 5 ✓ | Closure conversion (eliminate free variables) | Ch 10 |
+| 5b ✓ | Recursion elimination (error on recursion; unrolling deferred) | FunQ-specific |
 | 6 | Register spilling (bound free-variable count) | Ch 11 |
 | 7 | Emit OpenQASM / QIR | Replaces Chs 13–14 (abstract machine + codegen) |
 

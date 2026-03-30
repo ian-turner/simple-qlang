@@ -11,6 +11,7 @@ import Resolve
 import TopMonad
 import Lower (lowerDecl, runLower)
 import ToCPS (toCPSDecl)
+import RecElim (elimRecursion)
 import ClosureConv (closureConvert)
 
 
@@ -55,5 +56,11 @@ main = do
           let cpsExp = toCPSDecl name lexp
           putStrLn $ "  " ++ name ++ " = " ++ show cpsExp
           putStrLn $ ""
-          putStrLn "=== Closure-Converted IR ==="
-          putStrLn $ "  " ++ name ++ " = " ++ show (closureConvert cpsExp)
+          putStrLn "=== Recursion Check ==="
+          case elimRecursion cpsExp of
+            Left err     -> putStrLn $ "  error: " ++ err
+            Right cpsExp' -> do
+              putStrLn "  ok (no recursion)"
+              putStrLn $ ""
+              putStrLn "=== Closure-Converted IR ==="
+              putStrLn $ "  " ++ name ++ " = " ++ show (closureConvert cpsExp')
