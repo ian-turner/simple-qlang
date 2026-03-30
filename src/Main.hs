@@ -7,9 +7,6 @@ import Parser
 import Resolve
 import TopMonad
 import CompilePipeline
-import QubitHoist (HoistedProgram(..))
-import RecordShape (renderModuleRecordShapes)
-import GateDef (renderCallableKind, renderModuleCallableKinds)
 import OpenQASM (emitOpenQASM)
 
 
@@ -31,23 +28,10 @@ main = do
       case result of
         Left err    -> error $ show err
         Right decls' -> do
-          -- Lambda IR lowering
           let compiledModule = compileModule decls'
-          putStrLn "=== Lambda IR ==="
-          mapM_ printCompiledItem (compiledItems compiledModule)
-          putStrLn $ ""
-          putStrLn "=== Module Record Shapes ==="
-          mapM_ putStrLn (renderModuleRecordShapes (compiledRecordShapes compiledModule))
-          putStrLn $ ""
-          putStrLn "=== Module Gate/Def Classification ==="
-          mapM_ putStrLn (renderModuleCallableKinds (compiledCallableKinds compiledModule))
-          putStrLn $ ""
-          putStrLn "=== OpenQASM ==="
           case emitOpenQASM compiledModule of
-            Left err ->
-              putStrLn $ "  error: " ++ err
-            Right qasm ->
-              putStrLn qasm
+            Left err -> error err
+            Right qasm -> putStrLn qasm
   where
     resolution [] = return []
     resolution (d:ds) = do
@@ -56,52 +40,3 @@ main = do
       putScope sc'
       ds' <- resolution ds
       return (d':ds')
-
-    printCompiledItem SkippedDecl =
-      return ()
-    printCompiledItem (LoweringError err) =
-      putStrLn $ "  error: " ++ err
-    printCompiledItem (Compiled compiledDecl) = do
-      putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show (compiledLambdaIR compiledDecl)
-      putStrLn $ ""
-      putStrLn "=== CPS IR ==="
-      putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show (compiledCPSIR compiledDecl)
-      putStrLn $ ""
-      putStrLn "=== Recursion Check ==="
-      case compiledRecursionResult compiledDecl of
-        Left err ->
-          putStrLn $ "  error: " ++ err
-        Right _ -> do
-          putStrLn "  ok (no recursion)"
-          putStrLn $ ""
-          putStrLn "=== Interface-Flattened IR ==="
-          maybe (return ()) (\interfaceExp ->
-            putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show interfaceExp)
-            (compiledInterfaceIR compiledDecl)
-          putStrLn $ ""
-          putStrLn "=== Gate/Def Classification ==="
-          maybe (return ()) (\kind ->
-            putStrLn $ "  " ++ compiledName compiledDecl ++ " : " ++ renderCallableKind kind)
-            (compiledCallableKind compiledDecl)
-          putStrLn $ ""
-          putStrLn "=== Closure-Converted IR ==="
-          maybe (return ()) (\ccExp ->
-            putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show ccExp)
-            (compiledClosureIR compiledDecl)
-          putStrLn $ ""
-          putStrLn "=== Defunctionalized IR ==="
-          maybe (return ()) (\defuncExp ->
-            putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show defuncExp)
-            (compiledDefuncIR compiledDecl)
-          putStrLn $ ""
-          putStrLn "=== Qubit-Hoisted IR ==="
-          maybe (return ()) (printHoisted (compiledName compiledDecl)) (compiledHoistedIR compiledDecl)
-          putStrLn $ ""
-          putStrLn "=== Record-Flattened IR ==="
-          maybe (return ()) (\flattened ->
-            putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show flattened)
-            (compiledFlattenedIR compiledDecl)
-
-    printHoisted name hoisted = do
-      putStrLn $ "  qubits = " ++ show (hoistedQubitCount hoisted)
-      putStrLn $ "  " ++ name ++ " = " ++ show (hoistedBody hoisted)
