@@ -203,16 +203,170 @@ The key transformations from FunQ's current resolved AST to `LExp`:
 | `Var v` / `Const s` / `Base s` | `LVar v` / reference to top-level name |
 | Top-level `Def f (Lam ...)` | `LFix [(f, v, body)] cont` |
 
-**Pattern flattening** — the most complex transformation. A `Case` with nested
-patterns like `Alt (xs :. (PTuple [PFVar a, PFVar b], rhs))` becomes:
-1. Test the constructor tag via `LSwitch`
-2. For value-carrying constructors: `LDecon` to extract payload
-3. For tuple sub-patterns: `LSelect 0 payload` bound to `a`, `LSelect 1 payload` bound to `b`
+**Pattern flattening** — the most complex transformation. See the dedicated
+section below for the full problem description and solution.
 
 **Multi-argument base primitives** — FunQ's `init`, `hgate`, etc. are called
 as `Base "hgate"` applied to arguments. After lowering, they become
 `LPrim PHGate [arg]`. The lowering recognizes `App (Base p) e` and `App (App (Base p) e1) e2`
 patterns and converts them to the appropriate `LPrim`.
+
+---
+
+## Pattern Flattening
+
+### The problem
+
+FunQ's resolved `Case` expression binds pattern variables directly in `Alt`:
+
+```haskell
+-- Alt binds [x, xs'] over (PCon "Cons" [PFVar x, PFVar xs'], rhs)
+Alt (Bind [x, xs'] (PCon "Cons" [PFVar x, PFVar xs'], rhs))
+```
+
+`LSwitch` arms cannot bind variables — each arm is just `(ConAlt, LExp)`.
+The pattern variables must be extracted explicitly using `LDecon` (strip the
+constructor wrapper) and `LSelect` (project a tuple field).
+
+The same problem arises for `LetTuple`:
+
+```haskell
+-- let (a, b) = cnot q1 q2 in body
+LetTuple (App (App (Base "cnot") (Var q1)) (Var q2))
+         ([a, b] :. body)
+```
+
+`LExp` has no `LetTuple`. The binding must become two `LSelect` projections
+wrapped as nested `LApp (LLam v ...) e`.
+
+### The solution: `flattenPat` + `wrapLets`
+
+**Phase 1 — `flattenPat`:** given the scrutinee variable `t` and a pattern,
+produce:
+- `Maybe ConAlt` — the constructor tag to match in the `LSwitch` arm
+  (`Nothing` for irrefutable patterns like `PVar` / `PWild` / `PTuple`)
+- `[(Variable, LExp)]` — the variable bindings to introduce
+
+```haskell
+flattenPat :: Variable -> Pat -> Fresh (Maybe ConAlt, [(Variable, LExp)])
+
+flattenPat t (PVar v)  = return (Nothing, [(v, LVar t)])
+flattenPat t PWild     = return (Nothing, [])
+flattenPat t PUnit     = return (Just CAUnit, [])
+
+flattenPat t (PTuple fields) = do
+  -- no DECON needed: t is already the tuple
+  let bindings = [ (v, LSelect i (LVar t))
+                 | (i, PFVar v) <- zip [0..] fields ]
+  return (Nothing, bindings)
+
+flattenPat t (PCon name fields) = do
+  p <- fresh                          -- fresh var for the decon'd payload
+  let decon    = (p, LDecon name (LVar t))
+      selects  = [ (v, LSelect i (LVar p))
+                 | (i, PFVar v) <- zip [0..] fields ]
+  return (Just (CACon name), decon : selects)
+```
+
+**Phase 2 — `wrapLets`:** chain bindings as nested `LApp (LLam v ...) e`:
+
+```haskell
+wrapLets :: [(Variable, LExp)] -> LExp -> LExp
+wrapLets []           body = body
+wrapLets ((v, e):rest) body = LApp (LLam v (wrapLets rest body)) e
+```
+
+**Combined — lowering a `Case`:** bind the scrutinee to a fresh variable,
+run `flattenPat` on each arm, wrap the RHS in the resulting bindings, then
+decide whether a `LSwitch` is needed:
+
+```haskell
+lowerCase :: LExp -> [Alt] -> Lower LExp
+lowerCase scrut alts = do
+  t    <- fresh
+  arms <- mapM (lowerAlt t) alts
+  let taggedArms   = [ (tag, body) | (Just tag, body)  <- arms ]
+      defaultArm   = listToMaybe [ body | (Nothing, body) <- arms ]
+  let switch = LSwitch (LVar t) taggedArms defaultArm
+  return $ LApp (LLam t switch) scrut
+
+lowerAlt :: Variable -> Alt -> Lower (Maybe ConAlt, LExp)
+lowerAlt t (Alt (Bind _vs (pat, rhs))) = do
+  (tag, bindings) <- flattenPat t pat
+  rhs'            <- lowerExp rhs
+  return (tag, wrapLets bindings rhs')
+```
+
+### Worked example: `case xs of Nil -> ... | Cons x xs' -> ...`
+
+Input (after scope resolution):
+
+```
+Case (Var xs)
+  [ Alt (Bind []       (PCon "Nil"  [],                  nil_rhs))
+  , Alt (Bind [x, xs'] (PCon "Cons" [PFVar x, PFVar xs'], cons_rhs)) ]
+```
+
+Step 1 — bind scrutinee: fresh var `t`, wrap everything in `LApp (LLam t ...) (LVar xs)`.
+
+Step 2 — `Nil` arm: `flattenPat t (PCon "Nil" [])` → `(Just (CACon "Nil"), [])`;
+no bindings, so arm body = `nil_rhs'`.
+
+Step 3 — `Cons` arm: `flattenPat t (PCon "Cons" [PFVar x, PFVar xs'])`:
+- Fresh payload var `p`
+- Returns `(Just (CACon "Cons"), [(p, LDecon "Cons" (LVar t)), (x, LSelect 0 (LVar p)), (xs', LSelect 1 (LVar p))])`
+- `wrapLets` wraps `cons_rhs'`:
+
+```
+LApp (LLam p
+  (LApp (LLam x
+    (LApp (LLam xs' cons_rhs')
+          (LSelect 1 (LVar p))))
+        (LSelect 0 (LVar p))))
+     (LDecon "Cons" (LVar t))
+```
+
+Result:
+
+```
+LApp (LLam t
+  (LSwitch (LVar t)
+    [ (CACon "Nil",  nil_rhs')
+    , (CACon "Cons", <wrapped cons body above>) ]
+    Nothing))
+   (LVar xs)
+```
+
+### Worked example: `let (a, b) = cnot q1 q2 in body`
+
+Input: `LetTuple (App (App (Base "cnot") (Var q1)) (Var q2)) ([a, b] :. body)`
+
+This is treated as a degenerate one-arm `Case` with a `PTuple` pattern, or
+handled directly by the `LetTuple` lowering rule:
+
+1. Fresh var `t` for the tuple result
+2. `flattenPat t (PTuple [PFVar a, PFVar b])` → `(Nothing, [(a, LSelect 0 (LVar t)), (b, LSelect 1 (LVar t))])`
+3. `wrapLets` + bind scrutinee:
+
+```
+LApp (LLam t
+  (LApp (LLam a
+    (LApp (LLam b body')
+          (LSelect 1 (LVar t))))
+        (LSelect 0 (LVar t))))
+   (LApp (LApp (LPrim PCNot) (LVar q1)) (LVar q2))
+```
+
+### Key properties
+
+- `wrapLets` is the **universal binding mechanism** — it handles `LetTuple`,
+  `Case` arm variable binding, and argument destructuring through the same
+  path.
+- The `Fresh` monad is a lightweight `State Int` counter; only `PCon` arms
+  require a fresh intermediate variable (`p` for the deconstructed payload).
+- `PTuple` arms in `Case` produce `Nothing` as their tag — they fall into the
+  `defaultArm` of `LSwitch` (or, if the whole `Case` is irrefutable, the
+  `LSwitch` is omitted entirely).
 
 ---
 
