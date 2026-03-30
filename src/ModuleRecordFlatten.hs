@@ -97,10 +97,11 @@ flattenDef shapes exportAlias scope env (f, params, body) =
   let key = functionKeyFor exportAlias f
       paramShapes = lookupParamShapes shapes key (length params)
       (params', paramEnv) = flattenParams params paramShapes
+      scope' = bindParamKeys key params scope
       env' =
         Map.union paramEnv $
           foldr Map.delete (Map.delete f env) params
-  in (f, params', flattenExp shapes Nothing scope env' body)
+  in (f, params', flattenExp shapes Nothing scope' env' body)
 
 
 flattenParams :: [Variable] -> [Shape] -> ([Variable], Env)
@@ -308,6 +309,14 @@ bindFunctionKeys exportAlias defs scope =
   Map.fromList
     [ (f, functionKeyFor exportAlias f)
     | (f, _, _) <- defs
+    ] `Map.union` scope
+
+
+bindParamKeys :: FunctionKey -> [Variable] -> Scope -> Scope
+bindParamKeys key params scope =
+  Map.fromList
+    [ (param, ParamFunction key index)
+    | (index, param) <- zip [0 :: Int ..] params
     ] `Map.union` scope
 
 

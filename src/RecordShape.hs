@@ -24,6 +24,7 @@ data Shape
 data FunctionKey
   = TopLevelFunction String
   | LocalFunction Variable
+  | ParamFunction FunctionKey Int
   deriving (Eq, Ord)
 
 
@@ -102,8 +103,10 @@ collectExpArities exportAlias scope (CSelect _ _ _ body) =
   collectExpArities exportAlias scope body
 collectExpArities exportAlias scope (COffset _ _ _ body) =
   collectExpArities exportAlias scope body
-collectExpArities _ _ (CApp _ _) =
-  Map.empty
+collectExpArities _ scope (CApp fn args) =
+  case calleeKey scope fn of
+    Just key -> Map.singleton key (length args)
+    Nothing  -> Map.empty
 collectExpArities _ scope (CSwitch _ arms) =
   Map.unionsWith preferTopLevel (map (collectExpArities Nothing scope) arms)
 collectExpArities _ scope (CPrimOp _ _ _ conts) =
@@ -117,8 +120,8 @@ collectExpArities exportAlias scope (CFix defs body) =
           ]
       defArities =
         Map.unionsWith preferTopLevel
-          [ collectExpArities Nothing localScope defBody
-          | (_, _, defBody) <- defs
+          [ collectExpArities Nothing (bindParamKeys (functionKeyFor exportAlias f) params localScope) defBody
+          | (f, params, defBody) <- defs
           ]
       bodyArities = collectExpArities Nothing localScope body
   in Map.unionsWith preferTopLevel [localArities, defArities, bodyArities]
@@ -152,9 +155,14 @@ analyzeExp interfaces exportAlias scope env (COffset off val v body) =
   let env' = Map.insert v (offsetShape off (valueShape env val)) env
   in analyzeExp interfaces exportAlias scope env' body
 
-analyzeExp _ _ scope env (CApp fn args) =
+analyzeExp interfaces _ scope env (CApp fn args) =
   case calleeKey scope fn of
-    Just key -> Map.singleton key (map (valueShape env) args)
+    Just key ->
+      Map.unionsWith mergeShapeLists
+        (Map.singleton key (map (valueShape env) args)
+        : [ bridgeCallableArg interfaces scope key index arg
+          | (index, arg) <- zip [0 :: Int ..] args
+          ])
     Nothing  -> Map.empty
 
 analyzeExp interfaces exportAlias scope env (CFix defs body) =
@@ -192,11 +200,12 @@ analyzeDef
 analyzeDef interfaces scope env exportAlias (f, params, body) =
   let key = functionKeyFor exportAlias f
       paramShapes = Map.findWithDefault (replicate (length params) ShapeUnknown) key interfaces
+      scope' = bindParamKeys key params scope
       env' =
         foldr (\(param, shape) acc -> Map.insert param shape acc)
           env
           (zip params (padTo (length params) ShapeUnknown paramShapes))
-  in analyzeExp interfaces Nothing scope env' body
+  in analyzeExp interfaces Nothing scope' env' body
 
 
 bindFunctionKeys
@@ -211,11 +220,34 @@ bindFunctionKeys exportAlias defs scope =
     ] `Map.union` scope
 
 
+bindParamKeys :: FunctionKey -> [Variable] -> Scope -> Scope
+bindParamKeys key params scope =
+  Map.fromList
+    [ (param, ParamFunction key index)
+    | (index, param) <- zip [0 :: Int ..] params
+    ] `Map.union` scope
+
+
 bindFunctionValues :: Scope -> Env -> Env
 bindFunctionValues scope env =
   foldr Map.delete env (Map.keys scope)
   `Map.union`
   Map.fromList [ (v, ShapeScalar) | v <- Map.keys scope ]
+
+
+bridgeCallableArg :: InterfaceMap -> Scope -> FunctionKey -> Int -> Value -> InterfaceMap
+bridgeCallableArg interfaces scope callee index arg =
+  case calleeKey scope arg of
+    Just actual ->
+      let formal = ParamFunction callee index
+      in case Map.lookup formal interfaces of
+           Just formalShapes
+             | not (null formalShapes) ->
+                 Map.singleton actual formalShapes
+           _ ->
+                 Map.empty
+    Nothing ->
+      Map.empty
 
 
 exportedFunction :: ShapeDecl -> Maybe (Variable, String)
@@ -365,6 +397,8 @@ renderKey (TopLevelFunction name) =
   name
 renderKey (LocalFunction v) =
   show v
+renderKey (ParamFunction key index) =
+  renderKey key ++ "#" ++ show index
 
 
 renderShapeList :: [Shape] -> String

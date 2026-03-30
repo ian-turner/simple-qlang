@@ -64,7 +64,7 @@ introducing any optional optimizations or the linear type checker.
 5. Closure conversion (Appel Ch 10) — *done*
 6. Defunctionalization — *done*
 7. Qubit hoisting — *done*
-8. Tuple/record flattening
+8. Tuple/record flattening — *done* for tuple/data-flow records
 9. Gate/def classification
 10. Emit OpenQASM
 
