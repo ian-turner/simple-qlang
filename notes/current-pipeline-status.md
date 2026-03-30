@@ -85,9 +85,23 @@ The remaining work is now backend refinement rather than absence of a backend:
 
 1. emit reusable OpenQASM `gate` / `def` declarations instead of only
    entrypoint-driven inlining
-2. decide the long-term backend boundary relative to closure conversion /
+2. add bounded-recursion support through explicit loop lowering and static-list
+   erasure rather than rejecting all finite recursive programs
+3. decide the long-term backend boundary relative to closure conversion /
    defunctionalization
-3. broaden emitter coverage and reduce duplicated code in generated output
+4. broaden emitter coverage and reduce duplicated code in generated output
+
+The bounded-recursion design work now has a concrete sketch in
+`notes/bounded-recursion-lowering-plan-2026-03-30.md`. The planned direction is
+to add:
+
+- a static shape/size inference pass after CPS conversion
+- a bounded-recursion lowering pass that introduces explicit loop IR
+- a static-list erasure pass before the later backend-facing stages
+
+That work is required for examples such as `examples/ghz.funq`, whose recursive
+helpers are finite but currently rejected because the compiler does not yet
+lower fixed-size list recursion into loops and fixed aggregates.
 
 ## Documentation Drift To Keep In Mind
 

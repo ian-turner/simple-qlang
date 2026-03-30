@@ -148,7 +148,29 @@ Implemented in `src/LambdaIR.hs` (the `LExp` datatype) and `src/Lower.hs`
 - Measurement becomes `PRIMOP(measure, ...)` with one classical result and one
   continuation
 
-### 4. Recursion elimination **[required, done]**
+### 4. Bounded shape inference **[required for bounded recursion, planned]**
+Bounded recursion over lists cannot be lowered safely unless the compiler knows
+the recursive data has a finite compile-time shape. A new shape/size analysis
+stage should therefore run immediately after CPS conversion while recursive
+structure is still visible.
+
+Expected responsibilities:
+
+- infer fixed-size list lengths where possible
+- recognize top-level declarations whose result length is a known integer or a
+  symbolic size parameter
+- record enough facts to drive bounded recursion lowering
+
+Examples:
+
+- `init_n n` produces a `List Qubit` of length `n`
+- `meas_all xs` preserves the input list length
+- `ghz_4` has concrete length `4`
+
+This analysis should stay conservative: anything not proven bounded remains
+`unknown` and must still be rejected later if it participates in recursion.
+
+### 5. Recursion elimination / bounded lowering **[required, partially done]**
 **OpenQASM has no general recursion.** All recursive `FIX` bodies must be
 eliminated before emission. Two cases:
 
@@ -161,8 +183,8 @@ eliminated before emission. Two cases:
 
 This pass runs on CPS **before closure conversion**. That ordering is
 intentional: recursive calls are still direct `CApp (VVar f) args` nodes with
-`f` bound in the enclosing `CFix`, so recursion is easy to detect and, later,
-will be the simplest place to implement bounded unrolling. After closure
+`f` bound in the enclosing `CFix`, so recursion is easy to detect and is the
+right place to lower bounded recursion into explicit loop IR. After closure
 conversion, the same call is rewritten through closure records and code-pointer
 selection, which obscures direct self/sibling calls and makes the analysis
 substantially more complex without helping the current backend.
@@ -172,19 +194,47 @@ Detection: for each `CFix` group, intersect the bound names with the set of
 callee variables found anywhere in the function bodies; a non-empty
 intersection is a compile-time error.
 
-Current status: detection and error reporting are complete.  Unrolling of
-bounded recursion (the `for`-loop path) is deferred until after the full
-pipeline is validated end-to-end. `src/CompilePipeline.hs` also performs a
-module-level top-level recursion check over `VLabel` calls between compiled
-declarations so recursive label cycles are rejected before OpenQASM emission.
+Current status: detection and error reporting are complete. `src/CompilePipeline.hs`
+also performs a module-level top-level recursion check over `VLabel` calls
+between compiled declarations so recursive label cycles are rejected before
+OpenQASM emission.
 
-### 5. Closure conversion **[required, done]** (Chapter 10)
+Planned extension:
+
+- replace reject-only recursion handling with a bounded-recursion lowering pass
+- support counted self-recursion over `Int`
+- support structural recursion over statically sized lists once shape inference
+  can prove the length
+- add an explicit loop node to the CPS IR so later passes and the emitter no
+  longer need recursion to represent finite iteration
+
+The GHZ example needs more than simple integer-counted loops. `init_n`,
+`cnot_layer`, and `meas_all` all depend on static-list recursion lowering, so
+GHZ support requires both bounded shape inference and bounded recursion
+lowering.
+
+### 6. Static list erasure **[required for bounded list recursion, planned]**
+After bounded list recursion is lowered, statically sized `List` values should
+be rewritten into fixed records or tuples before the later backend-facing
+passes. OpenQASM does not have runtime algebraic lists, so `Nil`/`Cons`
+structure must not survive to emission.
+
+Expected responsibilities:
+
+- erase fixed-size `List a` values into record-like aggregates
+- rewrite list traversal helpers into indexed or record-field access
+- leave dynamically sized lists unsupported
+
+This stage is the bridge that should let examples like `ghz_4` compile once the
+compiler has already proven the list sizes.
+
+### 7. Closure conversion **[required, done]** (Chapter 10)
 Eliminate all free variables. Every `FIX`-bound function becomes a closed
 value; its free variables are bundled into an explicit closure record passed
 as an extra argument. After this pass the program is one flat top-level `FIX`
 with no nested scopes — a prerequisite for all subsequent passes.
 
-### 6. Defunctionalization **[required, done]**
+### 8. Defunctionalization **[required, done]**
 **OpenQASM has no function values.** After closure conversion, closures are
 still first-class data. Defunctionalization (Reynolds-style) converts all
 remaining higher-order functions into tagged data + a top-level dispatch
@@ -203,7 +253,7 @@ with integer tags in closure records and rewrites indirect closure calls into
 `SWITCH`-based dispatch over direct `VLabel` calls. Dispatch sets are currently
 per-declaration rather than minimized per call site.
 
-### 7. Qubit hoisting **[required, done]**
+### 9. Qubit hoisting **[required, done]**
 **OpenQASM requires all qubit declarations at top-level scope.**
 FunQ's `init()` creates qubits dynamically inside expressions.
 
@@ -223,7 +273,7 @@ sites after defunctionalization, substitutes the bound result variable with
 rewritten CPS expression. Actual `qubit q_i;` declarations and `reset`
 insertion remain part of the future OpenQASM emission stage.
 
-### 8. Tuple/record flattening **[required, done for tuple/data-flow records]**
+### 10. Tuple/record flattening **[required, done for tuple/data-flow records]**
 **OpenQASM has no tuple type.** The CPS IR uses `RECORD`/`SELECT` for tuples
 (e.g., qubit pairs from `cnot`). This pass replaces each tuple with individual
 scalar variables and rewrites all `SELECT` projections as direct variable references.
@@ -235,7 +285,7 @@ record shape is known. `src/RecordFlatten.hs` then performs local record
 cleanup after qubit hoisting. Closure-conversion and defunctionalization
 records remain conservative by design.
 
-### 9. Gate/def classification **[required, first cut done]**
+### 11. Gate/def classification **[required, first cut done]**
 Classify each closed `FIX`-bound function as `gate` or `def` before emission:
 
 - **`gate`**: body contains only gate applications — no measurement, no classical
@@ -254,7 +304,7 @@ module analysis over the interface-flattened CPS. The current classifier
 provides stable `gate`/`def` summaries for top-level declarations without
 letting closure-conversion or dispatch scaffolding dominate the result.
 
-### 10. Emit OpenQASM **[required, first cut done]**
+### 12. Emit OpenQASM **[required, first cut done]**
 Structural translation from the flat, closed, recursion-free CPS:
 
 | CPS | OpenQASM |
