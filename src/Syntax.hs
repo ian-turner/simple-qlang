@@ -41,6 +41,8 @@ data Exp
   = Unit                                      -- Unit type instance
   | NumInt Int                                -- Numbers
   | NumFloat Float
+  | BoolLit Bool                              -- Boolean literals True/False
+  | StringLit String                          -- String literals
   | Var Variable                              -- Bound variables
   | Const String                              -- Top-level defined constant
   | Base String                               -- Compiler-defined constant

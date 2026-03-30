@@ -2,8 +2,11 @@ module tele where
 
 
 -- Classically-controlled gates
-ctrl_x : Bool -> Qubit -> Qubit
-ctrl_z : Bool -> Qubit -> Qubit
+cctrl : (Qubit -> Qubit) -> (Bool -> Qubit -> Qubit)
+cctrl g = (\ a phi -> (if a then (g phi) else phi))
+
+cctrl_x = cctrl xgate
+cctrl_z = cctrl zgate
 
 -- Creates Bell_00 state
 bell00 : Unit -> (Qubit, Qubit)
@@ -20,8 +23,8 @@ tele phi =
     (a, b) = bell00 ()
     (phi, a) = cnot phi a
     phi = hgate phi
-    a = ctrl_x (meas b) a
-    phi' = ctrl_z (meas a) phi
+    a = cctrl_x (meas b) a
+    phi' = cctrl_z (meas a) phi
   in phi'
 
 -- Defines output variables

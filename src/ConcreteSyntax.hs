@@ -25,9 +25,12 @@ data Exp
   = Unit                                -- Unit type and value
   | NumInt Int                          -- Numbers
   | NumFloat Float
+  | BoolLit Bool                        -- Boolean literals True/False
+  | StringLit String                    -- String literals
   | Var String                          -- Variable identifiers
   | Tuple [Exp]                         -- Tuple of objects (any size)
   | App Exp Exp                         -- Function application
+  | BinOp String Exp Exp                -- Infix binary operator
   | Let [LetBinding] Exp                -- Let expression
   | Lam [String] Exp                    -- Lambda expressions
   | IfExp Exp Exp Exp                   -- If/then/else expressions

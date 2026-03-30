@@ -33,10 +33,23 @@ initialParserState =
     }
 
 initialOpTable :: [[E.Operator String ParserState (IndentT Identity) Exp]]
-initialOpTable = [ []
-                 , []
-                 , []
-                 ]
+initialOpTable =
+  [ [ E.Infix (reservedOp "||" >> return (BinOp "||")) E.AssocLeft ]
+  , [ E.Infix (reservedOp "&&" >> return (BinOp "&&")) E.AssocLeft ]
+  , [ E.Infix (reservedOp "==" >> return (BinOp "==")) E.AssocNone
+    , E.Infix (reservedOp "/=" >> return (BinOp "/=")) E.AssocNone
+    , E.Infix (reservedOp "<"  >> return (BinOp "<"))  E.AssocNone
+    , E.Infix (reservedOp ">"  >> return (BinOp ">"))  E.AssocNone
+    , E.Infix (reservedOp "<=" >> return (BinOp "<=")) E.AssocNone
+    , E.Infix (reservedOp ">=" >> return (BinOp ">=")) E.AssocNone
+    ]
+  , [ E.Infix (reservedOp "+" >> return (BinOp "+")) E.AssocLeft
+    , E.Infix (reservedOp "-" >> return (BinOp "-")) E.AssocLeft
+    ]
+  , [ E.Infix (reservedOp "*" >> return (BinOp "*")) E.AssocLeft
+    , E.Infix (reservedOp "/" >> return (BinOp "/")) E.AssocLeft
+    ]
+  ]
 
 parseModule :: String -> String -> ParserState
                -> Either P.ParseError ([Decl], ParserState)
@@ -75,11 +88,14 @@ term = getState >>= \st -> expParser st
 atomExp :: Parser Exp
 atomExp =
   unit
+  <|> try boolLit
+  <|> try strLit
   <|> try lamExp
   <|> try letExp
   <|> try caseExp
   <|> try tupleExp
   <|> try ifExp
+  <|> try negNum
   <|> try num
   <|> appExp
   <|> varExp
@@ -100,6 +116,15 @@ num = try numFloat <|> numInt
       let numStr = l ++ "." ++ r
       return $ NumFloat (read numStr)
 
+negNum :: Parser Exp
+negNum = do
+  reservedOp "-"
+  n <- num
+  case n of
+    NumInt x   -> return $ NumInt (negate x)
+    NumFloat x -> return $ NumFloat (negate x)
+    _          -> fail "expected number after -"
+
 appExp :: Parser Exp
 appExp =
   manyLines
@@ -110,7 +135,14 @@ appExp =
     headExp =
       dynliftExp <|> varExp
     arg =
-      try unit <|> dynliftExp <|> varExp <|> tupleExp
+      try unit <|> try boolLit <|> try strLit <|> try num <|> dynliftExp <|> varExp <|> tupleExp
+
+boolLit :: Parser Exp
+boolLit = (reserved "True" >> return (BoolLit True))
+       <|> (reserved "False" >> return (BoolLit False))
+
+strLit :: Parser Exp
+strLit = StringLit <$> stringLiteral
 
 tupleExp :: Parser Exp
 tupleExp = do
@@ -318,8 +350,8 @@ langStyle =
     , Token.nestedComments = True
     , Token.identStart = letter
     , Token.identLetter = alphaNum <|> oneOf "_'"
-    , Token.opStart = oneOf "!&*+/=-:|"
-    , Token.opLetter = oneOf "!&*+/=-:|"
+    , Token.opStart = oneOf "!&*+/=-:|<>"
+    , Token.opLetter = oneOf "!&*+/=-:|<>"
     , Token.caseSensitive = True
     , Token.reservedNames =
       [ "in"
@@ -333,6 +365,8 @@ langStyle =
       , "module"
       , "case"
       , "of"
+      , "True"
+      , "False"
       ]
     , Token.reservedOpNames =
         [ "\\"
@@ -341,6 +375,18 @@ langStyle =
         , "->"
         , ":"
         , "|"
+        , "+"
+        , "-"
+        , "*"
+        , "/"
+        , "=="
+        , "/="
+        , "<"
+        , ">"
+        , "<="
+        , ">="
+        , "&&"
+        , "||"
         ]
     }
 

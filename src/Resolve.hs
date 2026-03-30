@@ -26,11 +26,11 @@ emptyScope = Scope {
 --  scopeMap = Map.empty
   scopeMap = Map.fromList [ ("init", A.Base "init")
                           , ("hgate", A.Base "hgate")
-                          , ("xgate", A.Base "hgate")
-                          , ("zgate", A.Base "hgate")
+                          , ("xgate", A.Base "xgate")
+                          , ("zgate", A.Base "zgate")
                           , ("cnot", A.Base "cnot")
                           , ("meas", A.Base "meas")
-                          ] 
+                          ]
   }
 
 -- | Loop up a variable from a global scope using its name
@@ -144,6 +144,18 @@ resolve scope (C.IfExp b t f) =
 -- | Resolve explicit number constants
 resolve scope (C.NumInt n) = return (A.NumInt n)
 resolve scope (C.NumFloat x) = return (A.NumFloat x)
+
+-- | Resolve boolean literals
+resolve scope (C.BoolLit b) = return (A.BoolLit b)
+
+-- | Resolve string literals
+resolve scope (C.StringLit s) = return (A.StringLit s)
+
+-- | Resolve infix binary operators: desugar to nested App of Base operator
+resolve scope (C.BinOp op e1 e2) = do
+  e1' <- resolve scope e1
+  e2' <- resolve scope e2
+  return $ A.App (A.App (A.Base op) e1') e2'
 
 -- | Resolve dynamic lifting
 resolve scope C.Dynlift = return A.Dynlift
