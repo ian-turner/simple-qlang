@@ -33,7 +33,13 @@ The first emitter is intentionally entrypoint-driven.
 - It starts from the `output` declaration.
 - It inlines top-level calls reachable from `output`.
 - It emits one flat OpenQASM program with top-level `qubit[...]` declarations,
-  intermediate measurement bits, and typed `output_i` declarations.
+  intermediate measurement bits, and typed output declarations.
+- Homogeneous flattened outputs with more than one leaf are emitted as one
+  indexed OpenQASM container:
+  `bit[n] output` for measured-bit results and `array[type, n] output` for
+  other classical element types.
+- Mixed-type flattened outputs still fall back to individual `output_i`
+  declarations because OpenQASM arrays are homogeneous.
 
 This gets the compiler to the first end-to-end generated OpenQASM program for
 the current examples without yet committing to the final reusable `gate` /

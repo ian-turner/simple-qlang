@@ -57,11 +57,16 @@ data EmitState = EmitState
   { emitNextQubit :: Int
   , emitNextBit   :: Int
   , emitNextTemp  :: Int
-  , emitOutputTypes :: Maybe [ClassicalType]
+  , emitOutputLayout :: Maybe OutputLayout
   , emitTopLevelCache :: Map.Map String ValueRep
   , emitTopLevelInProgress :: Set.Set String
   , emitRecursiveBudget :: Int
   }
+
+data OutputLayout
+  = OutputScalars [ClassicalType]
+  | OutputArray ClassicalType Int
+  deriving (Eq)
 
 
 type ModuleEnv = Map.Map String CExp
@@ -79,21 +84,21 @@ emitOpenQASM compiledModule = do
           { emitNextQubit = 0
           , emitNextBit = 0
           , emitNextTemp = 0
-          , emitOutputTypes = Nothing
+          , emitOutputLayout = Nothing
           , emitTopLevelCache = Map.empty
           , emitTopLevelInProgress = Set.empty
           , emitRecursiveBudget = 10000
           }
   (stmts, finalState) <- runStateT (emitEntry moduleEnv outputExp) initState
-  outputTypes <-
-    case emitOutputTypes finalState of
-      Just tys -> Right tys
+  outputLayout <-
+    case emitOutputLayout finalState of
+      Just layout -> Right layout
       Nothing ->
         Left "OpenQASM emission failed: `output` never reached halt."
   pure $
     renderProgram
       (emitNextQubit finalState)
-      outputTypes
+      outputLayout
       stmts
 
 
@@ -152,29 +157,42 @@ assignOutputs :: [ValueRep] -> EmitM (EmitResult ())
 assignOutputs values = do
   let flatValues = concatMap flattenOutputValues values
   mapM_ ensureClassicalOutput flatValues
-  updateOutputTypes (map classicalTypeOfValue flatValues)
+  let outputLayout = chooseOutputLayout (map classicalTypeOfValue flatValues)
+  updateOutputLayout outputLayout
   let stmts =
-        [ StmtAssign ("output_" ++ show i) (renderClassicalValue value)
+        [ StmtAssign (renderOutputTarget outputLayout i) (renderClassicalValue value)
         | (i, value) <- zip [0 :: Int ..] flatValues
         ]
   pure EmitResult { resultStmts = stmts, resultValue = () }
 
 
-updateOutputTypes :: [ClassicalType] -> EmitM ()
-updateOutputTypes outputTypes = do
-  current <- gets emitOutputTypes
+chooseOutputLayout :: [ClassicalType] -> OutputLayout
+chooseOutputLayout (ty0 : ty1 : tys)
+  | all (== ty0) (ty1 : tys) = OutputArray ty0 (length tys + 2)
+chooseOutputLayout tys =
+  OutputScalars tys
+
+
+renderOutputTarget :: OutputLayout -> Int -> String
+renderOutputTarget (OutputArray _ _) i = "output[" ++ show i ++ "]"
+renderOutputTarget (OutputScalars _) i = "output_" ++ show i
+
+
+updateOutputLayout :: OutputLayout -> EmitM ()
+updateOutputLayout outputLayout = do
+  current <- gets emitOutputLayout
   case current of
     Nothing ->
-      modify (\st -> st { emitOutputTypes = Just outputTypes })
-    Just outputTypes'
-      | outputTypes' == outputTypes -> pure ()
+      modify (\st -> st { emitOutputLayout = Just outputLayout })
+    Just outputLayout'
+      | outputLayout' == outputLayout -> pure ()
       | otherwise ->
           lift $
             Left
-              ( "OpenQASM emission failed: inconsistent output signature. Expected "
-                  ++ show outputTypes'
+              ( "OpenQASM emission failed: inconsistent output layout. Expected "
+                  ++ showOutputLayout outputLayout'
                   ++ ", saw "
-                  ++ show outputTypes
+                  ++ showOutputLayout outputLayout
                   ++ "."
               )
 
@@ -1043,24 +1061,38 @@ isCtorPayload ValueUnit = True
 isCtorPayload _ = False
 
 
-renderProgram :: Int -> [ClassicalType] -> [Stmt] -> String
-renderProgram qubitCount outputTypes stmts =
+showOutputLayout :: OutputLayout -> String
+showOutputLayout (OutputScalars tys) =
+  "scalars " ++ show tys
+showOutputLayout (OutputArray ty n) =
+  "array " ++ show ty ++ "[" ++ show n ++ "]"
+
+
+renderProgram :: Int -> OutputLayout -> [Stmt] -> String
+renderProgram qubitCount outputLayout stmts =
   unlines $
     [ "OPENQASM 3.0;"
     , "include \"stdgates.inc\";"
     ]
       ++ qubitDecls
-      ++ outputDecls
+      ++ renderOutputDecls outputLayout
       ++ [""]
       ++ concatMap (renderStmt 0) stmts
   where
     qubitDecls
       | qubitCount <= 0 = []
       | otherwise = ["qubit[" ++ show qubitCount ++ "] q;"]
-    outputDecls =
-      [ renderClassicalType ty ++ " output_" ++ show i ++ ";"
-      | (i, ty) <- zip [0 :: Int ..] outputTypes
-      ]
+
+
+renderOutputDecls :: OutputLayout -> [String]
+renderOutputDecls (OutputScalars outputTypes) =
+  [ renderClassicalType ty ++ " output_" ++ show i ++ ";"
+  | (i, ty) <- zip [0 :: Int ..] outputTypes
+  ]
+renderOutputDecls (OutputArray CTypeBit n) =
+  ["bit[" ++ show n ++ "] output;"]
+renderOutputDecls (OutputArray ty n) =
+  ["array[" ++ renderClassicalType ty ++ ", " ++ show n ++ "] output;"]
 
 
 renderStmt :: Int -> Stmt -> [String]
