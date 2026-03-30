@@ -10,6 +10,7 @@ import Parser
 import Resolve
 import TopMonad
 import Lower (lowerDecl, runLower)
+import ToCPS (toCPSDecl)
 
 
 parserIO :: Either ParseError a -> IO a
@@ -46,4 +47,8 @@ main = do
       case runLower (lowerDecl d) of
         Left err        -> putStrLn $ "  error: " ++ err
         Right Nothing   -> return ()
-        Right (Just (name, lexp)) -> putStrLn $ "  " ++ name ++ " = " ++ show lexp
+        Right (Just (name, lexp)) -> do
+          putStrLn $ "  " ++ name ++ " = " ++ show lexp
+          putStrLn $ ""
+          putStrLn "=== CPS IR ==="
+          putStrLn $ "  " ++ name ++ " = " ++ show (toCPSDecl name lexp)

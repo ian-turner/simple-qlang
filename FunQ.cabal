@@ -70,6 +70,8 @@ executable funq
         TopMonad
         LambdaIR
         Lower
+        CPSExp
+        ToCPS
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

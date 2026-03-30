@@ -91,13 +91,15 @@ tele phi =
 ```
 FunQ.cabal          — package definition and build configuration
 src/
-  Main.hs           — entry point: parse, resolve, lower, print Lambda IR
+  Main.hs           — entry point: parse, resolve, lower, CPS-convert, print
   Parser.hs         — Parsec parser (concrete syntax -> ConcreteSyntax)
   ConcreteSyntax.hs — concrete syntax tree
   Resolve.hs        — scope resolution (ConcreteSyntax -> Syntax)
   Syntax.hs         — abstract syntax (uses nominal library for binding)
   LambdaIR.hs       — Lambda IR datatype (LExp); analogous to Appel's lexp
   Lower.hs          — lowering pass (Syntax -> LambdaIR)
+  CPSExp.hs         — CPS IR datatype (CExp, Value); Appel §2.1
+  ToCPS.hs          — CPS conversion pass (LambdaIR -> CPSExp); Appel Ch 5
   TopMonad.hs       — top-level compilation monad
   Utils.hs          — shared utilities
 examples/           — sample FunQ programs
@@ -126,9 +128,9 @@ for f in examples/*.funq; do
 done
 ```
 
-The compiler currently parses, scope-resolves, and lowers to Lambda IR, then
-prints the Lambda IR to stdout. CPS conversion and code generation are not yet
-implemented.
+The compiler currently parses, scope-resolves, lowers to Lambda IR, and converts
+to CPS, printing both IRs to stdout. Closure conversion and code generation are
+not yet implemented.
 
 ---
 
@@ -140,7 +142,7 @@ implemented.
 | Scope resolution | Done |
 | Lower to Lambda IR (Appel Ch 4) | Done |
 | Type checking (linear types) | Deferred |
-| CPS conversion | Not started |
+| CPS conversion (Appel Ch 5) | Done |
 | CPS optimisation | Deferred |
 | Closure conversion | Not started |
 | Register spilling | Deferred |
