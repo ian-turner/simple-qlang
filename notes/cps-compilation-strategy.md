@@ -326,13 +326,18 @@ Structural translation from the flat, closed, recursion-free CPS:
 | Top-level `output` binding | `output` declaration |
 | Classical `PRIMOP(+, ...)` etc. | arithmetic expression |
 
-Type sizing: FunQ's `Int` → `int[32]`, `Float` → `float[64]`, `Bool` → `bool`.
+Type sizing: FunQ's `Int` → `int[32]`, `Float` → `float[64]`, `Bool` → `bool`,
+and measured classical results currently emit as `bit`.
 
 Current status: a first emitter now lives in `src/OpenQASM.hs`. The current
 backend is intentionally pragmatic: it emits from the interface-flattened CPS,
 starts from `output`, performs global qubit allocation during emission, and
 inlines reachable top-level calls into a single OpenQASM program. Reusable
 `gate` / `def` declaration emission is still future backend refinement work.
+Float literals are now preserved symbolically through the middle end so values
+such as `pi` can reach OpenQASM emission unchanged; future backends such as QIR
+should lower those symbolic constants at a backend-specific boundary rather
+than in the front half of the compiler.
 If earlier compilation stages reported recursion errors, the emitter now stops
 immediately with that compile-stage failure summary instead of attempting
 backend inlining through missing declarations.

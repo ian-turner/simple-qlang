@@ -9,8 +9,8 @@ This note records the first landed gate/`def` classification pass.
 - `src/CompilePipeline.hs` now computes interface-flattened CPS first, runs the
   classifier over that module view, then continues with closure conversion,
   defunctionalization, qubit hoisting, and local record flattening.
-- `src/Main.hs` prints both per-declaration classifications and a module
-  summary.
+- `src/Main.hs` now uses the classifier through `src/CompilePipeline.hs`; the
+  CLI no longer prints a separate classification summary.
 
 ## Current Heuristic
 

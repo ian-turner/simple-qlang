@@ -9,8 +9,8 @@ tuple/record-flattening stage.
 inside one CPS expression. That is enough to remove some administrative record
 traffic, but it cannot eliminate records that cross function boundaries.
 
-The main reason is that the current driver in `src/Main.hs` compiles and prints
-each top-level declaration independently:
+The original blocker was that the old driver in `src/Main.hs` compiled and
+printed each top-level declaration independently:
 
 - lower one declaration
 - CPS-convert one declaration
@@ -33,7 +33,8 @@ Status update:
 - the first signature-aware flattening rewrite now exists in
   `src/ModuleRecordFlatten.hs`
 - `src/CompilePipeline.hs` now runs that pass before closure conversion
-- `src/Main.hs` now prints an `Interface-Flattened IR` stage
+- `src/Main.hs` no longer owns stage-by-stage debug printing; module-level
+  compilation and emission are now driven through `src/CompilePipeline.hs`
 - continuation-result flattening across top-level declaration boundaries is now
   also landed
 - gate/`def` classification now runs after interface flattening
@@ -59,7 +60,8 @@ Minimum useful shape:
 Status:
 
 - implemented as `CompiledDecl` / `CompiledModule` in `src/CompilePipeline.hs`
-- `src/Main.hs` now formats compiled artifacts instead of driving the pipeline
+- `src/Main.hs` now delegates compilation to that pipeline and emits final
+  OpenQASM rather than formatting intermediate artifacts
 
 ### 2. Whole-module record-shape analysis
 
@@ -84,7 +86,8 @@ Status:
 
 - implemented conservatively in `src/RecordShape.hs`
 - currently stored on `CompiledModule`
-- currently printed as a top-level debug summary in `src/Main.hs`
+- currently stored on `CompiledModule`; separate debug formatting could be added
+  again if needed, but the CLI now emits final OpenQASM only
 
 ### 3. Rewrite function signatures and call sites together
 

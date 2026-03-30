@@ -69,6 +69,10 @@ That emitter currently:
 - inlines reachable top-level calls into one flat OpenQASM program
 - refuses to run if earlier compilation stages rejected recursive top-level
   label cycles
+- preserves symbolic float constants through to emission so values such as
+  `pi` appear directly in generated OpenQASM
+- emits typed output declarations per leaf (`bit`, `bool`, `int[32]`,
+  `float[64]`) instead of assuming every output is a measurement bit
 
 Gate/`def` classification remains implemented as a conservative top-level pass
 over the interface-flattened CPS in `src/GateDef.hs`.

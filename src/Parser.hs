@@ -90,6 +90,7 @@ atomExp =
   unit
   <|> try boolLit
   <|> try strLit
+  <|> try piLit
   <|> try lamExp
   <|> try letExp
   <|> try caseExp
@@ -104,7 +105,7 @@ unit :: Parser Exp
 unit = reservedOp "()" >> return Unit
 
 num :: Parser Exp
-num = try numFloat <|> numInt
+num = try numFloat <|> try piLit <|> numInt
   where
     numInt = do
       d <- lexeme (many1 digit)
@@ -114,7 +115,7 @@ num = try numFloat <|> numInt
       reservedOp "."
       r <- lexeme (many1 digit)
       let numStr = l ++ "." ++ r
-      return $ NumFloat (read numStr)
+      return $ NumFloat numStr
 
 negNum :: Parser Exp
 negNum = do
@@ -122,7 +123,7 @@ negNum = do
   n <- num
   case n of
     NumInt x   -> return $ NumInt (negate x)
-    NumFloat x -> return $ NumFloat (negate x)
+    NumFloat x -> return $ NumFloat ("-" ++ x)
     _          -> fail "expected number after -"
 
 appExp :: Parser Exp
@@ -135,7 +136,7 @@ appExp =
     headExp =
       dynliftExp <|> varExp
     arg =
-      try unit <|> try boolLit <|> try strLit <|> try num <|> dynliftExp <|> varExp <|> tupleExp
+      try unit <|> try boolLit <|> try strLit <|> try piLit <|> try num <|> dynliftExp <|> varExp <|> tupleExp
 
 boolLit :: Parser Exp
 boolLit = (reserved "True" >> return (BoolLit True))
@@ -143,6 +144,9 @@ boolLit = (reserved "True" >> return (BoolLit True))
 
 strLit :: Parser Exp
 strLit = StringLit <$> stringLiteral
+
+piLit :: Parser Exp
+piLit = reserved "pi" >> return (NumFloat "pi")
 
 tupleExp :: Parser Exp
 tupleExp = do
@@ -367,6 +371,7 @@ langStyle =
       , "of"
       , "True"
       , "False"
+      , "pi"
       ]
     , Token.reservedOpNames =
         [ "\\"

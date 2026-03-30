@@ -28,7 +28,7 @@ data PrimOp
 -- | Literal values
 data Lit
   = LInt    Int
-  | LFloat  Float
+  | LFloat  String
   | LBool   Bool
   | LString String
   | LUnit

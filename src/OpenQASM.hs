@@ -32,8 +32,17 @@ data ValueRep
 
 
 data ClassicalRep
-  = ClassicalConst Int
-  | ClassicalVar String
+  = ClassicalIntConst Int
+  | ClassicalFloatConst String
+  | ClassicalVar ClassicalType String
+
+
+data ClassicalType
+  = CTypeInt
+  | CTypeFloat
+  | CTypeBool
+  | CTypeBit
+  deriving (Eq, Show)
 
 
 data Stmt
@@ -48,7 +57,7 @@ data EmitState = EmitState
   { emitNextQubit :: Int
   , emitNextBit   :: Int
   , emitNextTemp  :: Int
-  , emitOutputArity :: Maybe Int
+  , emitOutputTypes :: Maybe [ClassicalType]
   , emitTopLevelCache :: Map.Map String ValueRep
   , emitTopLevelInProgress :: Set.Set String
   , emitRecursiveBudget :: Int
@@ -70,21 +79,21 @@ emitOpenQASM compiledModule = do
           { emitNextQubit = 0
           , emitNextBit = 0
           , emitNextTemp = 0
-          , emitOutputArity = Nothing
+          , emitOutputTypes = Nothing
           , emitTopLevelCache = Map.empty
           , emitTopLevelInProgress = Set.empty
           , emitRecursiveBudget = 10000
           }
   (stmts, finalState) <- runStateT (emitEntry moduleEnv outputExp) initState
-  outputArity <-
-    case emitOutputArity finalState of
-      Just arity -> Right arity
+  outputTypes <-
+    case emitOutputTypes finalState of
+      Just tys -> Right tys
       Nothing ->
         Left "OpenQASM emission failed: `output` never reached halt."
   pure $
     renderProgram
       (emitNextQubit finalState)
-      outputArity
+      outputTypes
       stmts
 
 
@@ -143,7 +152,7 @@ assignOutputs :: [ValueRep] -> EmitM (EmitResult ())
 assignOutputs values = do
   let flatValues = concatMap flattenOutputValues values
   mapM_ ensureClassicalOutput flatValues
-  updateOutputArity (length flatValues)
+  updateOutputTypes (map classicalTypeOfValue flatValues)
   let stmts =
         [ StmtAssign ("output_" ++ show i) (renderClassicalValue value)
         | (i, value) <- zip [0 :: Int ..] flatValues
@@ -151,21 +160,21 @@ assignOutputs values = do
   pure EmitResult { resultStmts = stmts, resultValue = () }
 
 
-updateOutputArity :: Int -> EmitM ()
-updateOutputArity arity = do
-  current <- gets emitOutputArity
+updateOutputTypes :: [ClassicalType] -> EmitM ()
+updateOutputTypes outputTypes = do
+  current <- gets emitOutputTypes
   case current of
     Nothing ->
-      modify (\st -> st { emitOutputArity = Just arity })
-    Just arity'
-      | arity' == arity -> pure ()
+      modify (\st -> st { emitOutputTypes = Just outputTypes })
+    Just outputTypes'
+      | outputTypes' == outputTypes -> pure ()
       | otherwise ->
           lift $
             Left
-              ( "OpenQASM emission failed: inconsistent output arity. Expected "
-                  ++ show arity'
+              ( "OpenQASM emission failed: inconsistent output signature. Expected "
+                  ++ show outputTypes'
                   ++ ", saw "
-                  ++ show arity
+                  ++ show outputTypes
                   ++ "."
               )
 
@@ -192,7 +201,7 @@ runExp moduleEnv env (CSelect i val v body) haltK = do
   valueResult <- evalValue moduleEnv env val
   selected <-
     case resultValue valueResult of
-      ValueClassical (ClassicalConst n) ->
+      ValueClassical (ClassicalIntConst n) ->
         lift $
           Left
             ( "OpenQASM emission failed: select "
@@ -201,6 +210,26 @@ runExp moduleEnv env (CSelect i val v body) haltK = do
                 ++ show val
                 ++ " saw scalar "
                 ++ show n
+                ++ "."
+            )
+      ValueClassical (ClassicalFloatConst s) ->
+        lift $
+          Left
+            ( "OpenQASM emission failed: select "
+                ++ show i
+                ++ " from "
+                ++ show val
+                ++ " saw float scalar "
+                ++ s
+                ++ "."
+            )
+      ValueClassical (ClassicalVar _ name) ->
+        lift $
+          Left
+            ( "OpenQASM emission failed: select "
+                ++ show i
+                ++ " from scalar variable "
+                ++ name
                 ++ "."
             )
       selectedValue ->
@@ -237,19 +266,26 @@ runExp moduleEnv env (CSwitch val arms) haltK = do
   valueResult <- evalValue moduleEnv env val
   scrutinee <- evalSwitchScrutinee (resultValue valueResult)
   case scrutinee of
-    ClassicalConst n
+    ClassicalIntConst n
       | n >= 0 && n < length arms ->
           do
             emitted <- runExp moduleEnv env (arms !! n) haltK
             pure emitted { resultStmts = resultStmts valueResult ++ resultStmts emitted }
-    ClassicalConst n ->
+    ClassicalIntConst n ->
       lift $
         Left
           ( "OpenQASM emission failed: switch index "
               ++ show n
               ++ " is out of bounds."
           )
-    ClassicalVar name -> do
+    ClassicalFloatConst symbol ->
+      lift $
+        Left
+          ( "OpenQASM emission failed: switch scrutinee cannot be a float constant: "
+              ++ symbol
+              ++ "."
+          )
+    ClassicalVar _ name -> do
       armResults <- mapM (\arm -> runExp moduleEnv env arm haltK) arms
       case armResults of
         [] ->
@@ -293,7 +329,7 @@ applyPath (OFFp n) (ValueCtor tag payload)
   | n <= 0 =
       pure (ValueCtor tag payload)
   | otherwise =
-      applyPath (OFFp (n - 1)) (ValueRecord [payload, ValueClassical (ClassicalConst tag)])
+      applyPath (OFFp (n - 1)) (ValueRecord [payload, ValueClassical (ClassicalIntConst tag)])
 applyPath (OFFp n) (ValueRecord fields) =
   pure (ValueSlice (drop n fields))
 applyPath (OFFp n) (ValueSlice fields) =
@@ -313,7 +349,7 @@ selectField :: Int -> ValueRep -> EmitM ValueRep
 selectField 0 (ValueCtor _ payload) =
   pure payload
 selectField 1 (ValueCtor tag _) =
-  pure (ValueClassical (ClassicalConst tag))
+  pure (ValueClassical (ClassicalIntConst tag))
 selectField i (ValueRecord fields)
   | i >= 0 && i < length fields = pure (fields !! i)
 selectField i (ValueSlice fields)
@@ -334,7 +370,7 @@ offsetValue 0 value =
   pure value
 offsetValue off (ValueCtor tag payload)
   | off > 0 =
-      offsetValue (off - 1) (ValueRecord [payload, ValueClassical (ClassicalConst tag)])
+      offsetValue (off - 1) (ValueRecord [payload, ValueClassical (ClassicalIntConst tag)])
 offsetValue off (ValueRecord fields) =
   pure (ValueSlice (drop off fields))
 offsetValue off (ValueSlice fields) =
@@ -358,7 +394,9 @@ evalValue _ env (VVar v) =
       lift $
         Left ("OpenQASM emission failed: unbound variable " ++ show v ++ ".")
 evalValue _ _ (VInt n) =
-  pure EmitResult { resultStmts = [], resultValue = ValueClassical (ClassicalConst n) }
+  pure EmitResult { resultStmts = [], resultValue = ValueClassical (ClassicalIntConst n) }
+evalValue _ _ (VFloat s) =
+  pure EmitResult { resultStmts = [], resultValue = ValueClassical (ClassicalFloatConst s) }
 evalValue _ _ (VQubit i) =
   pure EmitResult { resultStmts = [], resultValue = ValueQubit i }
 evalValue _ _ VUnit =
@@ -627,7 +665,7 @@ runDirectPrimOp moduleEnv env PCTGate [arg0, arg1] [r0, r1] [cont] haltK
         Map.insert r1 (ValueQubit q1) (Map.insert r0 (ValueQubit q0) env)
   emitted <- runExp moduleEnv env' cont haltK
   pure emitted { resultStmts = StmtGate "cp(pi/4)" [q0, q1] : resultStmts emitted }
-runDirectPrimOp moduleEnv env PCpGate [ValueClassical (ClassicalConst k), arg0, arg1] [r0, r1] [cont] haltK
+runDirectPrimOp moduleEnv env PCpGate [ValueClassical (ClassicalIntConst k), arg0, arg1] [r0, r1] [cont] haltK
   | Just q0 <- extractQubitArg arg0
   , Just q1 <- extractQubitArg arg1 = do
   let env' =
@@ -638,19 +676,20 @@ runDirectPrimOp moduleEnv env PCpGate [ValueClassical (ClassicalConst k), arg0, 
 runDirectPrimOp moduleEnv env PMeas [arg] [result] [cont] haltK
   | Just q <- extractQubitArg arg = do
   bitName <- freshBitName
-  let env' = Map.insert result (ValueClassical (ClassicalVar bitName)) env
+  let env' = Map.insert result (ValueClassical (ClassicalVar CTypeBit bitName)) env
   emitted <- runExp moduleEnv env' cont haltK
   pure emitted { resultStmts = StmtMeasure bitName q : resultStmts emitted }
 runDirectPrimOp moduleEnv env op args [result] [cont] haltK
   | isClassicalPrim op = do
       case evalClassicalPrimConst op args of
         Just constValue -> do
-          let env' = Map.insert result (ValueClassical (ClassicalConst constValue)) env
+          let env' = Map.insert result (ValueClassical (ClassicalIntConst constValue)) env
           runExp moduleEnv env' cont haltK
         Nothing -> do
           tempName <- freshTempName
-          let env' = Map.insert result (ValueClassical (ClassicalVar tempName)) env
-              declType = if isBooleanPrim op then "bool" else "int[32]"
+          let resultType = inferClassicalPrimType op args
+              env' = Map.insert result (ValueClassical (ClassicalVar resultType tempName)) env
+              declType = renderClassicalType resultType
           emitted <- runExp moduleEnv env' cont haltK
           pure
             emitted
@@ -717,7 +756,7 @@ runPrimitiveExecution moduleEnv PCTGate [arg0, arg1] cont haltK
   , Just q1 <- extractQubitArg arg1 = do
   emitted <- applyCallable moduleEnv cont [ValueQubit q0, ValueQubit q1] haltK
   pure emitted { resultStmts = StmtGate "cp(pi/4)" [q0, q1] : resultStmts emitted }
-runPrimitiveExecution moduleEnv PCpGate [ValueClassical (ClassicalConst k), arg0, arg1] cont haltK
+runPrimitiveExecution moduleEnv PCpGate [ValueClassical (ClassicalIntConst k), arg0, arg1] cont haltK
   | Just q0 <- extractQubitArg arg0
   , Just q1 <- extractQubitArg arg1 = do
   emitted <- applyCallable moduleEnv cont [ValueQubit q0, ValueQubit q1] haltK
@@ -726,7 +765,7 @@ runPrimitiveExecution moduleEnv PCpGate [ValueClassical (ClassicalConst k), arg0
 runPrimitiveExecution moduleEnv PMeas [arg] cont haltK
   | Just q <- extractQubitArg arg = do
   bitName <- freshBitName
-  emitted <- applyCallable moduleEnv cont [ValueClassical (ClassicalVar bitName)] haltK
+  emitted <- applyCallable moduleEnv cont [ValueClassical (ClassicalVar CTypeBit bitName)] haltK
   pure emitted { resultStmts = StmtMeasure bitName q : resultStmts emitted }
 runPrimitiveExecution _ op _ _ _ =
   lift $
@@ -794,7 +833,7 @@ evalClassicalPrimConst :: PrimOp -> [ValueRep] -> Maybe Int
 evalClassicalPrimConst op args =
   mapM asConst args >>= eval op
   where
-    asConst (ValueClassical (ClassicalConst n)) = Just n
+    asConst (ValueClassical (ClassicalIntConst n)) = Just n
     asConst _ = Nothing
 
     boolToInt False = 0
@@ -844,7 +883,7 @@ evalClassicalValue value =
 
 evalSwitchScrutinee :: ValueRep -> EmitM ClassicalRep
 evalSwitchScrutinee (ValueCtor tag _) =
-  pure (ClassicalConst tag)
+  pure (ClassicalIntConst tag)
 evalSwitchScrutinee (ValueRecord [_, ValueClassical tag]) =
   pure tag
 evalSwitchScrutinee (ValueSlice (_ : ValueClassical tag : _)) =
@@ -854,10 +893,37 @@ evalSwitchScrutinee value =
 
 
 renderClassicalValue :: ValueRep -> String
-renderClassicalValue (ValueClassical (ClassicalConst n)) = show n
-renderClassicalValue (ValueClassical (ClassicalVar name)) = name
+renderClassicalValue (ValueClassical (ClassicalIntConst n)) = show n
+renderClassicalValue (ValueClassical (ClassicalFloatConst s)) = s
+renderClassicalValue (ValueClassical (ClassicalVar _ name)) = name
 renderClassicalValue value =
   error ("attempted to render non-classical value: " ++ showValueRep value)
+
+
+renderClassicalType :: ClassicalType -> String
+renderClassicalType CTypeInt = "int[32]"
+renderClassicalType CTypeFloat = "float[64]"
+renderClassicalType CTypeBool = "bool"
+renderClassicalType CTypeBit = "bit"
+
+
+classicalTypeOfValue :: ValueRep -> ClassicalType
+classicalTypeOfValue (ValueClassical (ClassicalFloatConst _)) = CTypeFloat
+classicalTypeOfValue (ValueClassical (ClassicalVar ty _)) = ty
+classicalTypeOfValue _ = CTypeInt
+
+
+isFloatClassicalValue :: ValueRep -> Bool
+isFloatClassicalValue (ValueClassical (ClassicalFloatConst _)) = True
+isFloatClassicalValue (ValueClassical (ClassicalVar CTypeFloat _)) = True
+isFloatClassicalValue _ = False
+
+
+inferClassicalPrimType :: PrimOp -> [ValueRep] -> ClassicalType
+inferClassicalPrimType op args
+  | isBooleanPrim op = CTypeBool
+  | any isFloatClassicalValue args = CTypeFloat
+  | otherwise = CTypeInt
 
 
 freshQubit :: EmitM Int
@@ -883,8 +949,9 @@ freshTempName = do
 
 showValueRep :: ValueRep -> String
 showValueRep (ValueCallable _) = "<callable>"
-showValueRep (ValueClassical (ClassicalConst n)) = show n
-showValueRep (ValueClassical (ClassicalVar name)) = name
+showValueRep (ValueClassical (ClassicalIntConst n)) = show n
+showValueRep (ValueClassical (ClassicalFloatConst s)) = s
+showValueRep (ValueClassical (ClassicalVar _ name)) = name
 showValueRep (ValueQubit i) = "q[" ++ show i ++ "]"
 showValueRep (ValueCtor tag _) = "<ctor:" ++ show tag ++ ">"
 showValueRep (ValueRecord fields) = "<record:" ++ show (length fields) ++ ">"
@@ -913,13 +980,13 @@ flattenOutputValues value =
 
 
 flattenListValue :: ValueRep -> Maybe [ValueRep]
-flattenListValue (ValueClassical (ClassicalConst 0)) =
+flattenListValue (ValueClassical (ClassicalIntConst 0)) =
   Just []
 flattenListValue (ValueCtor 1 payload) = do
   (headValue, tailValue) <- splitConsPayload payload
   tailValues <- flattenListValue tailValue
   Just (headValue : tailValues)
-flattenListValue (ValueRecord [payload, ValueClassical (ClassicalConst 1)]) = do
+flattenListValue (ValueRecord [payload, ValueClassical (ClassicalIntConst 1)]) = do
   (headValue, tailValue) <- splitConsPayload payload
   tailValues <- flattenListValue tailValue
   Just (headValue : tailValues)
@@ -962,7 +1029,7 @@ ensureClassicalOutput value =
 
 
 buildRecordValue :: [ValueRep] -> ValueRep
-buildRecordValue [payload, ValueClassical (ClassicalConst tag)]
+buildRecordValue [payload, ValueClassical (ClassicalIntConst tag)]
   | isCtorPayload payload =
   ValueCtor tag payload
 buildRecordValue fields =
@@ -976,8 +1043,8 @@ isCtorPayload ValueUnit = True
 isCtorPayload _ = False
 
 
-renderProgram :: Int -> Int -> [Stmt] -> String
-renderProgram qubitCount outputArity stmts =
+renderProgram :: Int -> [ClassicalType] -> [Stmt] -> String
+renderProgram qubitCount outputTypes stmts =
   unlines $
     [ "OPENQASM 3.0;"
     , "include \"stdgates.inc\";"
@@ -991,8 +1058,8 @@ renderProgram qubitCount outputArity stmts =
       | qubitCount <= 0 = []
       | otherwise = ["qubit[" ++ show qubitCount ++ "] q;"]
     outputDecls =
-      [ "bit output_" ++ show i ++ ";"
-      | i <- [0 .. outputArity - 1]
+      [ renderClassicalType ty ++ " output_" ++ show i ++ ";"
+      | (i, ty) <- zip [0 :: Int ..] outputTypes
       ]
 
 

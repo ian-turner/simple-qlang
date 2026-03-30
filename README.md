@@ -31,6 +31,7 @@ FunQ looks like a small ML-family language. It has:
 | `Qubit` | Linear quantum bit — must be used exactly once |
 | `Bool` | Classical boolean |
 | `Int` | Classical integer |
+| `Float` | Symbolic floating-point constant or expression |
 | `String` | String literal |
 | `Unit` | Unit value `()` |
 | `(a, b)` | Tuple |
@@ -46,6 +47,9 @@ FunQ looks like a small ML-family language. It has:
 | `xgate` | `Qubit -> Qubit` | Pauli-X (NOT) gate |
 | `zgate` | `Qubit -> Qubit` | Pauli-Z gate |
 | `cnot` | `Qubit -> Qubit -> (Qubit, Qubit)` | Controlled-NOT gate |
+
+Float literals are preserved symbolically through the middle end. That means
+surface forms such as `pi` and `1.5` can reach OpenQASM emission unchanged.
 
 ### Example: Bell state
 

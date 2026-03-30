@@ -227,8 +227,9 @@ variables" for register allocation or spilling purposes.
 
 ## FunQ Implementation Notes (Stage 4 — complete)
 
-`src/ClosureConv.hs` implements the pass. `CPSExp.hs` was extended with `COffset`.
-`Main.hs` now prints the closure-converted IR after the CPS IR.
+`src/ClosureConv.hs` implements the pass. `CPSExp.hs` was extended with
+`COffset`. The current CLI no longer prints intermediate IR stages, but the
+closure-converted form remains part of the compiled module pipeline.
 
 ### Design decisions made during implementation
 

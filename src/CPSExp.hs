@@ -16,6 +16,7 @@ data Value
   = VVar   Variable    -- local variable
   | VLabel String      -- top-level function label (resolved post-linking)
   | VInt   Int         -- integer or boolean constant (False=0, True=1)
+  | VFloat String      -- symbolic float constant, preserved for backend lowering
   | VQubit Int         -- statically assigned backend qubit slot
   | VUnit              -- unit constant
   deriving (Show, Eq)

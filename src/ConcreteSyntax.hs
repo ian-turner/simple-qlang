@@ -24,7 +24,7 @@ data Pat
 data Exp
   = Unit                                -- Unit type and value
   | NumInt Int                          -- Numbers
-  | NumFloat Float
+  | NumFloat String
   | BoolLit Bool                        -- Boolean literals True/False
   | StringLit String                    -- String literals
   | Var String                          -- Variable identifiers

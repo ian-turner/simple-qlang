@@ -11,10 +11,9 @@ cabal build                              # build the compiler
 cabal run funq -- examples/bell00.funq  # run on a source file
 ```
 
-The compiler now runs through a first OpenQASM emission path in addition to the
-existing IR stages. It prints the intermediate forms plus generated OpenQASM to
-stdout. There is no test suite yet; verify changes by running the examples
-manually.
+The compiler now runs through a first OpenQASM emission path and prints the
+generated OpenQASM to stdout. There is no test suite yet; verify changes by
+running the examples manually.
 
 ---
 
@@ -41,7 +40,7 @@ manually.
 | `Defunc.hs` | Defunctionalization: replaces runtime code pointers with tags and dispatch |
 | `QubitHoist.hs` | Hoists `init` to static qubit slots after defunctionalization |
 | `RecordFlatten.hs` | Local record simplification after qubit hoisting |
-| `Main.hs` | Orchestrates the full pipeline; prints each IR stage |
+| `Main.hs` | Orchestrates the full pipeline and prints emitted OpenQASM |
 
 ## Key dependencies
 

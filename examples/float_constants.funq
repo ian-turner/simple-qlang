@@ -1,0 +1,8 @@
+module float_constants where
+
+
+data List a = Nil | Cons a (List a)
+
+
+output : List Float
+output = Cons pi (Cons (-1.3) (Cons pi Nil))

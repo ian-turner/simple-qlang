@@ -6,8 +6,8 @@ This note records the first landed OpenQASM backend path.
 
 - `src/OpenQASM.hs` adds a first emitter that lowers the
   interface-flattened CPS directly to OpenQASM 3 text.
-- `src/Main.hs` now prints an `OpenQASM` section after the existing IR and
-  analysis summaries.
+- `src/Main.hs` now drives the full pipeline and prints the emitted OpenQASM
+  program directly.
 - The emitter runs from the module pipeline output but intentionally uses the
   `compiledInterfaceIR` stage rather than the closure-converted /
   defunctionalized forms.
@@ -33,7 +33,7 @@ The first emitter is intentionally entrypoint-driven.
 - It starts from the `output` declaration.
 - It inlines top-level calls reachable from `output`.
 - It emits one flat OpenQASM program with top-level `qubit[...]` declarations,
-  intermediate measurement bits, and `output_i` bits.
+  intermediate measurement bits, and typed `output_i` declarations.
 
 This gets the compiler to the first end-to-end generated OpenQASM program for
 the current examples without yet committing to the final reusable `gate` /
@@ -51,6 +51,8 @@ The landed emitter currently handles:
 - simple classical `switch`
 - primitive function values such as `xgate` and `zgate` passed through
   top-level higher-order code
+- symbolic float constants such as `pi`, preserved from parsing through
+  OpenQASM emission
 
 Validated with:
 

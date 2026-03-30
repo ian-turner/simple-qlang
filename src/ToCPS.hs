@@ -24,7 +24,7 @@ toCPS (LTopVar s)         c = c (VLabel s)
 toCPS (LLit LUnit)        c = c VUnit
 toCPS (LLit (LInt n))     c = c (VInt n)
 toCPS (LLit (LBool b))    c = c (VInt (if b then 1 else 0))
-toCPS (LLit (LFloat _))   c = c (VInt 0)   -- floats not yet in CPS IR
+toCPS (LLit (LFloat s))   c = c (VFloat s)
 toCPS (LLit (LString _))  c = c (VInt 0)   -- strings not yet in CPS IR
 
 -- §5.4  Lambda abstraction — gains extra continuation parameter k

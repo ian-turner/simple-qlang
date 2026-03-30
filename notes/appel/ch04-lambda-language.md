@@ -174,13 +174,18 @@ data LExp
   | LSwitch LExp [(ConAlt, LExp)] (Maybe LExp)  -- single-level constructor test
   | LPrim   PrimOp [LExp]               -- primitive operations (gates, arithmetic)
 
-data Lit    = LInt Int | LFloat Float | LBool Bool | LString String | LUnit
+data Lit    = LInt Int | LFloat String | LBool Bool | LString String | LUnit
 data ConAlt = CATag Int | CACon String  -- match by integer tag or constructor name
 ```
 
 Omitted vs. Appel: `RAISE`/`HANDLE` (FunQ has no exceptions), `REAL`/`STRING`
 as separate constructors (folded into `LLit`), `conrep` metadata (not needed
 until codegen).
+
+FunQ now keeps float literals symbolic in `LFloat String` rather than reducing
+them to host-language `Float` values. This preserves source forms such as
+`pi` and decimal literals through the middle end so backend-specific lowering
+can interpret them appropriately.
 
 ---
 
