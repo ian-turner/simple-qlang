@@ -1,20 +1,13 @@
 module Main where
 
-import System.IO
 import System.Environment (getArgs)
-import Control.Monad.Except
-import Control.Exception
 import Text.Parsec
 
 import Parser
 import Resolve
 import TopMonad
-import Lower (lowerDecl, runLower)
-import ToCPS (toCPSDecl)
-import RecElim (elimRecursion)
-import ClosureConv (closureConvert)
-import Defunc (defunctionalize)
-import QubitHoist (HoistedProgram(..), hoistQubits)
+import CompilePipeline
+import QubitHoist (HoistedProgram(..))
 
 
 parserIO :: Either ParseError a -> IO a
@@ -29,15 +22,15 @@ main = do
     (srcName : _) -> do
       -- Parsing
       fileContents <- readFile srcName
-      (decls, _) <- parserIO $ parseModule srcName fileContents initialParserState
+      (parsedDecls, _) <- parserIO $ parseModule srcName fileContents initialParserState
       -- Scope resolution
-      (result, _) <- runTop $ resolution decls
+      (result, _) <- runTop $ resolution parsedDecls
       case result of
         Left err    -> error $ show err
         Right decls' -> do
           -- Lambda IR lowering
           putStrLn "=== Lambda IR ==="
-          mapM_ printLowered decls'
+          mapM_ printCompiledItem (compiledItems (compileModule decls'))
   where
     resolution [] = return []
     resolution (d:ds) = do
@@ -47,32 +40,41 @@ main = do
       ds' <- resolution ds
       return (d':ds')
 
-    printLowered d =
-      case runLower (lowerDecl d) of
-        Left err        -> putStrLn $ "  error: " ++ err
-        Right Nothing   -> return ()
-        Right (Just (name, lexp)) -> do
-          putStrLn $ "  " ++ name ++ " = " ++ show lexp
+    printCompiledItem SkippedDecl =
+      return ()
+    printCompiledItem (LoweringError err) =
+      putStrLn $ "  error: " ++ err
+    printCompiledItem (Compiled compiledDecl) = do
+      putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show (compiledLambdaIR compiledDecl)
+      putStrLn $ ""
+      putStrLn "=== CPS IR ==="
+      putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show (compiledCPSIR compiledDecl)
+      putStrLn $ ""
+      putStrLn "=== Recursion Check ==="
+      case compiledRecursionResult compiledDecl of
+        Left err ->
+          putStrLn $ "  error: " ++ err
+        Right _ -> do
+          putStrLn "  ok (no recursion)"
           putStrLn $ ""
-          putStrLn "=== CPS IR ==="
-          let cpsExp = toCPSDecl name lexp
-          putStrLn $ "  " ++ name ++ " = " ++ show cpsExp
+          putStrLn "=== Closure-Converted IR ==="
+          maybe (return ()) (\ccExp ->
+            putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show ccExp)
+            (compiledClosureIR compiledDecl)
           putStrLn $ ""
-          putStrLn "=== Recursion Check ==="
-          case elimRecursion cpsExp of
-            Left err     -> putStrLn $ "  error: " ++ err
-            Right cpsExp' -> do
-              putStrLn "  ok (no recursion)"
-              putStrLn $ ""
-              putStrLn "=== Closure-Converted IR ==="
-              let ccExp = closureConvert cpsExp'
-              putStrLn $ "  " ++ name ++ " = " ++ show ccExp
-              putStrLn $ ""
-              putStrLn "=== Defunctionalized IR ==="
-              let defuncExp = defunctionalize ccExp
-              putStrLn $ "  " ++ name ++ " = " ++ show defuncExp
-              putStrLn $ ""
-              putStrLn "=== Qubit-Hoisted IR ==="
-              let hoisted = hoistQubits defuncExp
-              putStrLn $ "  qubits = " ++ show (hoistedQubitCount hoisted)
-              putStrLn $ "  " ++ name ++ " = " ++ show (hoistedBody hoisted)
+          putStrLn "=== Defunctionalized IR ==="
+          maybe (return ()) (\defuncExp ->
+            putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show defuncExp)
+            (compiledDefuncIR compiledDecl)
+          putStrLn $ ""
+          putStrLn "=== Qubit-Hoisted IR ==="
+          maybe (return ()) (printHoisted (compiledName compiledDecl)) (compiledHoistedIR compiledDecl)
+          putStrLn $ ""
+          putStrLn "=== Record-Flattened IR ==="
+          maybe (return ()) (\flattened ->
+            putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show flattened)
+            (compiledFlattenedIR compiledDecl)
+
+    printHoisted name hoisted = do
+      putStrLn $ "  qubits = " ++ show (hoistedQubitCount hoisted)
+      putStrLn $ "  " ++ name ++ " = " ++ show (hoistedBody hoisted)
