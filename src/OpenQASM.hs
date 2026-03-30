@@ -4,6 +4,7 @@ module OpenQASM
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
+import Control.Monad (foldM)
 import Control.Monad.State.Strict
 import Data.List (intercalate)
 
@@ -50,8 +51,10 @@ data Stmt
   | StmtMeasure String Int
   | StmtAssign String String
   | StmtDeclareAssign String String String
+  | StmtIf String [Stmt]
   | StmtIfElse String [Stmt] [Stmt]
   | StmtSwitch String [(Int, [Stmt])]
+  deriving (Eq, Show)
 
 
 data EmitState = EmitState
@@ -305,19 +308,33 @@ runExp moduleEnv env (CSwitch val arms) haltK = do
               ++ "."
           )
     ClassicalVar _ name -> do
-      armResults <- mapM (\arm -> runExp moduleEnv env arm haltK) arms
+      startState <- get
+      armOutcomes <- mapM (\arm -> emitBranchArm startState (runExp moduleEnv env arm haltK)) arms
+      mergedState <- mergeBranchStates startState (map snd armOutcomes)
+      put mergedState
+      let armResults = map fst armOutcomes
       case armResults of
         [] ->
           lift $
             Left "OpenQASM emission failed: switch expression has no arms."
         [falseArm, trueArm] ->
-          pure $
-            EmitResult
-              { resultStmts =
-                  resultStmts valueResult
-                    ++ [StmtIfElse (name ++ " == 1") (resultStmts trueArm) (resultStmts falseArm)]
-              , resultValue = resultValue trueArm
-              }
+          let (falsePrefix, truePrefix, sharedSuffix) =
+                splitCommonSuffix (resultStmts falseArm) (resultStmts trueArm)
+              branchStmts =
+                case (null falsePrefix, null truePrefix) of
+                  (True, True) -> []
+                  (True, False) -> [StmtIf (name ++ " == 1") truePrefix]
+                  (False, True) -> [StmtIf (name ++ " != 1") falsePrefix]
+                  (False, False) -> [StmtIfElse (name ++ " == 1") truePrefix falsePrefix]
+          in
+            pure $
+              EmitResult
+                { resultStmts =
+                    resultStmts valueResult
+                      ++ branchStmts
+                      ++ sharedSuffix
+                , resultValue = resultValue trueArm
+                }
         (firstArm : _) ->
           pure $
             EmitResult
@@ -337,6 +354,55 @@ bindFix env defs =
       Map.union
         (Map.fromList [ (f, ValueCallable (CallableFun params body env')) | (f, params, body) <- defs ])
         env
+
+
+splitCommonSuffix :: Eq a => [a] -> [a] -> ([a], [a], [a])
+splitCommonSuffix xs ys =
+  let commonRev = map fst $ takeWhile (uncurry (==)) $ zip (reverse xs) (reverse ys)
+      commonLen = length commonRev
+      sharedSuffix = reverse commonRev
+  in (take (length xs - commonLen) xs, take (length ys - commonLen) ys, sharedSuffix)
+
+
+emitBranchArm :: EmitState -> EmitM a -> EmitM (a, EmitState)
+emitBranchArm startState action =
+  case runStateT action startState of
+    Left err -> lift (Left err)
+    Right outcome -> pure outcome
+
+
+mergeBranchStates :: EmitState -> [EmitState] -> EmitM EmitState
+mergeBranchStates startState states =
+  foldM mergeOne startState states
+  where
+    mergeOne acc st = do
+      outputLayout <- mergeOutputLayoutMaybe (emitOutputLayout acc) (emitOutputLayout st)
+      pure
+        acc
+          { emitNextQubit = max (emitNextQubit acc) (emitNextQubit st)
+          , emitNextBit = max (emitNextBit acc) (emitNextBit st)
+          , emitNextTemp = max (emitNextTemp acc) (emitNextTemp st)
+          , emitOutputLayout = outputLayout
+          , emitTopLevelCache = Map.union (emitTopLevelCache acc) (emitTopLevelCache st)
+          , emitTopLevelInProgress = Set.union (emitTopLevelInProgress acc) (emitTopLevelInProgress st)
+          , emitRecursiveBudget = min (emitRecursiveBudget acc) (emitRecursiveBudget st)
+          }
+
+
+mergeOutputLayoutMaybe :: Maybe OutputLayout -> Maybe OutputLayout -> EmitM (Maybe OutputLayout)
+mergeOutputLayoutMaybe Nothing rhs = pure rhs
+mergeOutputLayoutMaybe lhs Nothing = pure lhs
+mergeOutputLayoutMaybe lhs@(Just leftLayout) (Just rightLayout)
+  | leftLayout == rightLayout = pure lhs
+  | otherwise =
+      lift $
+        Left
+          ( "OpenQASM emission failed: inconsistent output layout across branch arms. Expected "
+              ++ showOutputLayout leftLayout
+              ++ ", saw "
+              ++ showOutputLayout rightLayout
+              ++ "."
+          )
 
 
 evalField :: ModuleEnv -> Env -> (Value, AccessPath) -> EmitM (EmitResult ValueRep)
@@ -1115,6 +1181,10 @@ renderStmt indentLevel (StmtAssign name valueExpr) =
   [indent indentLevel ++ name ++ " = " ++ valueExpr ++ ";"]
 renderStmt indentLevel (StmtDeclareAssign declType name valueExpr) =
   [indent indentLevel ++ declType ++ " " ++ name ++ " = " ++ valueExpr ++ ";"]
+renderStmt indentLevel (StmtIf condition trueStmts) =
+  [indent indentLevel ++ "if (" ++ condition ++ ") {"]
+    ++ concatMap (renderStmt (indentLevel + 1)) trueStmts
+    ++ [indent indentLevel ++ "}"]
 renderStmt indentLevel (StmtIfElse condition trueStmts falseStmts) =
   [indent indentLevel ++ "if (" ++ condition ++ ") {"]
     ++ concatMap (renderStmt (indentLevel + 1)) trueStmts

@@ -49,4 +49,5 @@ infrastructure:
 - reusable OpenQASM `gate` / `def` emission is still not implemented
 - bounded recursion still relies on budget-unrolling rather than explicit loop
   lowering
-- generated control flow still duplicates shared post-branch continuations
+- generated control flow now hoists identical trailing suffixes out of dynamic
+  two-arm branches, but general join-point extraction is still not implemented
