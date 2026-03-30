@@ -107,13 +107,14 @@ toCPSPrim PMeas args c =
     freshNames ["w"] $ \[w] ->
       CPrimOp PMeas vs [w] [c (VVar w)]
 
--- PCNot: two output qubits — bind both, then pack into a record so that
--- the continuation c receives a single Value (the record address).
--- The RECORD/SELECT pair is eliminated by beta-contraction later.
-toCPSPrim PCNot args c =
+-- PCNot, PCSGate, PCTGate: two output qubits — bind both, then pack into a
+-- record so that the continuation c receives a single Value (the record
+-- address).  The RECORD/SELECT pair is eliminated by beta-contraction later.
+toCPSPrim op args c
+  | op `elem` [PCNot, PCSGate, PCTGate] =
   toCPSList args $ \vs ->
     freshNames ["q1", "q2", "r"] $ \[q1', q2', r] ->
-      CPrimOp PCNot vs [q1', q2']
+      CPrimOp op vs [q1', q2']
         [ CRecord [(VVar q1', OFFp 0), (VVar q2', OFFp 0)] r (c (VVar r)) ]
 
 -- All other primops: category 1 — one result variable, one continuation.

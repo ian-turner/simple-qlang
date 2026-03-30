@@ -171,8 +171,12 @@ mergeKinds kinds
 
 
 gateCompatiblePrim :: PrimOp -> Bool
-gateCompatiblePrim PHGate = True
-gateCompatiblePrim PXGate = True
-gateCompatiblePrim PZGate = True
-gateCompatiblePrim PCNot  = True
-gateCompatiblePrim _      = False
+gateCompatiblePrim PHGate  = True
+gateCompatiblePrim PXGate  = True
+gateCompatiblePrim PZGate  = True
+gateCompatiblePrim PCNot   = True
+gateCompatiblePrim PSGate  = True
+gateCompatiblePrim PTGate  = True
+gateCompatiblePrim PCSGate = True
+gateCompatiblePrim PCTGate = True
+gateCompatiblePrim _       = False
