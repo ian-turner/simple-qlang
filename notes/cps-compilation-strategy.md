@@ -346,10 +346,8 @@ result[1] = c1;
 
 ## Chapters to Read
 
-- **Chapter 11**: Register spilling — next required stage
-
 Deferred (after required pipeline is complete):
 - **Chapter 3**: Formal semantics of CPS — needed for reasoning about linearity preservation
 - **Chapter 6**: Optimizations — β-contraction (§6.1) and eta reduction (§6.2)
 
-Chapters 1, 2, 4, 5, 10 are fully read; see `notes/appel/` for detailed notes.
+Chapters 1, 2, 4, 5, 10, 11 are fully read; see `notes/appel/` for detailed notes.

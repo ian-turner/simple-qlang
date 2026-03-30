@@ -86,4 +86,5 @@ emitting VAX/MIPS/SPARC assembly, we emit OpenQASM gate sequences or QIR LLVM IR
 | 4 | Read | [ch04-lambda-language.md](ch04-lambda-language.md) |
 | 5 | Read | [ch05-cps-conversion.md](ch05-cps-conversion.md) |
 | 10 | Read | [ch10-closure-conversion.md](ch10-closure-conversion.md) |
-| 3, 6–9, 11–18 | Not started | — |
+| 11 | Read | [ch11-register-spilling.md](ch11-register-spilling.md) |
+| 3, 6–9, 12–18 | Not started | — |
