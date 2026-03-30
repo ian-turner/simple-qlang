@@ -13,8 +13,8 @@ See also `../cps-compilation-strategy.md` for the high-level strategy document.
 
 | Stage | Description | Appel chapter(s) |
 |---|---|---|
-| 1 | Parse + type-check FunQ (linear types) | FunQ-specific, not in Appel |
-| 2 | Lower to λ-calculus-like form; desugar patterns/data | Ch 4 (§4.1–4.2, §4.5–4.8) |
+| 1 ✓ | Parse + type-check FunQ (linear types) | FunQ-specific, not in Appel |
+| 2 ✓ | Lower to λ-calculus-like form; desugar patterns/data | Ch 4 (§4.1–4.2, §4.5–4.8) |
 | 3 | Convert to CPS | Ch 5 |
 | 4a | β-contraction, constant folding | Ch 6 (§6.1–6.2) |
 | 4b | Eta reduction, cascading optimizations | Ch 6 (§6.2–6.3) |

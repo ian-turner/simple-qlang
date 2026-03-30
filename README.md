@@ -91,11 +91,13 @@ tele phi =
 ```
 FunQ.cabal          — package definition and build configuration
 src/
-  Main.hs           — entry point: parse, resolve, print AST
+  Main.hs           — entry point: parse, resolve, lower, print Lambda IR
   Parser.hs         — Parsec parser (concrete syntax -> ConcreteSyntax)
   ConcreteSyntax.hs — concrete syntax tree
   Resolve.hs        — scope resolution (ConcreteSyntax -> Syntax)
   Syntax.hs         — abstract syntax (uses nominal library for binding)
+  LambdaIR.hs       — Lambda IR datatype (LExp); analogous to Appel's lexp
+  Lower.hs          — lowering pass (Syntax -> LambdaIR)
   TopMonad.hs       — top-level compilation monad
   Utils.hs          — shared utilities
 examples/           — sample FunQ programs
@@ -124,8 +126,9 @@ for f in examples/*.funq; do
 done
 ```
 
-The compiler currently parses and scope-resolves the input, then prints the
-resolved abstract syntax tree to stdout. Code generation is not yet implemented.
+The compiler currently parses, scope-resolves, and lowers to Lambda IR, then
+prints the Lambda IR to stdout. CPS conversion and code generation are not yet
+implemented.
 
 ---
 
@@ -135,11 +138,12 @@ resolved abstract syntax tree to stdout. Code generation is not yet implemented.
 |---|---|
 | Parse + concrete syntax | Done |
 | Scope resolution | Done |
-| Type checking (linear types) | Not started |
+| Lower to Lambda IR (Appel Ch 4) | Done |
+| Type checking (linear types) | Deferred |
 | CPS conversion | Not started |
-| CPS optimisation | Not started |
+| CPS optimisation | Deferred |
 | Closure conversion | Not started |
-| Register spilling | Not started |
+| Register spilling | Deferred |
 | OpenQASM / QIR emission | Not started |
 
 See `notes/appel/index.md` for the mapping of remaining stages to Appel chapters.

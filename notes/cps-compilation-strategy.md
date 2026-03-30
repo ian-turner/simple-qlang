@@ -102,11 +102,19 @@ correctness). The current priority is to complete all required stages first.
 FunQ source → annotated AST. Linear type checking is deferred until after the
 full OpenQASM pipeline is working; for now we assume a well-typed, linear input.
 
-### 2. Lower to λ-calculus form **[required]** (Chapter 4)
+### 2. Lower to λ-calculus form **[required, done]** (Chapter 4)
 Desugar pattern matching, case expressions, and data constructors into a
 minimal λ-calculus-like form that the CPS conversion algorithm (Ch 5) operates
 on. FunQ already has these constructs; this pass simplifies them into the
 small set of forms Appel's converter expects.
+
+Implemented in `src/LambdaIR.hs` (the `LExp` datatype) and `src/Lower.hs`
+(the `Syntax.Exp → LExp` transformation). Key design points:
+- Multi-arg lambdas → nested `LLam`; `let`/`let (a,b) =` → `LApp (LLam ...)`
+- Case patterns flattened: constructor vars extracted via `LDecon`/`LSelect`
+- Multi-field constructors (`Cons x xs'`) → `LCon "Cons" (LTuple [x, xs'])`
+- Primitives (`hgate`, `+`, etc.) → `LPrim op []` as first-class values;
+  curried applications eagerly collected into `LPrim op [args]`
 
 ### 3. Convert to CPS **[required]** (Chapter 5)
 - Every function gains an extra continuation argument `c`
