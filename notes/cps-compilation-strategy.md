@@ -1,4 +1,4 @@
-# CPS Compilation Strategy for FunQ → OpenQASM/QIR
+# CPS Compilation Strategy for FunQ → OpenQASM
 
 Reference: *Compiling with Continuations*, Andrew W. Appel (Cambridge University Press, 1992)
 
@@ -19,7 +19,7 @@ Appel's key insight (§1.1, p. 3): once you name all control points, optimizatio
 ## Why CPS is a Good IR for FunQ
 
 ### Control and data flow are explicit (§1.2, p. 4)
-CPS makes every aspect of control and data flow explicit in the program representation. For quantum compilation this matters: an OpenQASM or QIR program is essentially a flat, ordered sequence of gate applications and conditional branches. CPS naturally produces this structure because all calls are tail calls — there is no "stack" to unwind, just a chain of continuations.
+CPS makes every aspect of control and data flow explicit in the program representation. For quantum compilation this matters: an OpenQASM program is essentially a flat, ordered sequence of gate applications and conditional branches. CPS naturally produces this structure because all calls are tail calls — there is no "stack" to unwind, just a chain of continuations.
 
 ### Single-binding property (§1.2, pp. 4–5)
 CPS variables are bound exactly once, giving CPS a property similar to Static Single-Assignment (SSA) form. This maps well to quantum circuits, where qubit identities are tracked statically through the circuit.
@@ -69,7 +69,12 @@ Measurement is the crucial case. Unlike a gate, measurement is **non-determinist
 PRIMOP(measure, [VAR q], [], [E_zero, E_one])
 ```
 
-`E_zero` and `E_one` are the continuations for the `|0⟩` and `|1⟩` outcomes respectively. In OpenQASM this becomes a conditional branch on a measurement result; in QIR it becomes a `__quantum__rt__result_equal` check followed by a branch instruction.
+`E_zero` and `E_one` are the continuations for the `|0⟩` and `|1⟩` outcomes respectively. In OpenQASM this becomes:
+
+```openqasm
+bit c = measure q;
+if (c) { E_one } else { E_zero }
+```
 
 ### Classical control flow → `SWITCH`
 
@@ -81,43 +86,96 @@ SWITCH(VAR bit, [E_false, E_true])
 
 ### Recursive/parameterized circuits → `FIX`
 
-Recursive quantum algorithms (QFT, quantum walk, etc.) use `FIX` to define mutually recursive functions. The compiler can then decide whether to inline them (beta expansion, Chapter 7) or emit them as subroutines in the target language.
+Recursive quantum algorithms (QFT, quantum walk, etc.) use `FIX` to define mutually recursive functions. Before emission, all recursion must be eliminated (see Recursion Elimination below).
 
 ---
 
-## Suggested Compilation Pipeline
+## Compilation Pipeline
 
-Following Appel's compiler organization (§1.4, pp. 9–10), adapted for FunQ:
+Following Appel's compiler organization (§1.4, pp. 9–10), adapted for FunQ and the OpenQASM target:
 
-1. **Parse + type-check** FunQ source → annotated AST
-   - Linear type checking ensures qubits are not cloned or discarded (no-cloning theorem)
-   - This is FunQ-specific and not covered by Appel
+### 1. Parse + type-check
+FunQ source → annotated AST.
+- Linear type checking ensures qubits are not cloned or discarded (no-cloning theorem)
+- This is FunQ-specific and not covered by Appel
 
-2. **Lower to λ-calculus form** (Chapter 4 in Appel)
-   - Desugar pattern matching, case expressions, data constructors
-   - FunQ already has data types and case expressions
+### 2. Lower to λ-calculus form (Chapter 4)
+- Desugar pattern matching, case expressions, data constructors
+- FunQ already has data types and case expressions
 
-3. **Convert to CPS** (Chapter 5)
-   - Every function gains an extra continuation argument `c`
-   - Returning a value `v` becomes `APP(c, [v])`
-   - Measurement becomes `PRIMOP(measure, ...)` with two continuations
-   - See §5.4 (function calls) and §5.7 (case statements) for the conversion rules
+### 3. Convert to CPS (Chapter 5)
+- Every function gains an extra continuation argument `c`
+- Returning a value `v` becomes `APP(c, [v])`
+- Measurement becomes `PRIMOP(measure, ...)` with two continuations
+- See §5.4 (function calls) and §5.7 (case statements) for the conversion rules
 
-4. **Optimize CPS** (Chapters 6–9)
-   - Constant folding and β-contraction (§6.1): inline trivial continuations
-   - Eta reduction (§6.2): eliminate redundant continuation wrappers
-   - Common subexpression elimination (Chapter 9): deduplicate classical computations
+### 4. Optimize CPS (Chapters 6–9)
+- Constant folding and β-contraction (§6.1): inline trivial continuations
+- Eta reduction (§6.2): eliminate redundant continuation wrappers
+- Common subexpression elimination (Chapter 9): deduplicate classical computations
 
-5. **Closure conversion** (Chapter 10)
-   - Eliminate all free variables from functions
-   - Required before emitting flat target code
+### 5. Closure conversion (Chapter 10)
+Eliminate all free variables from functions. Every `FIX`-bound function becomes a closed value; its environment is passed as an explicit extra argument. Required before the remaining passes, which operate on closed terms.
 
-6. **Emit OpenQASM / QIR**
-   - After closure conversion and register spilling (Chapter 11), the CPS expression is a flat graph of tail calls
-   - `APP` of a gate → emit gate instruction
-   - `PRIMOP(measure,...)` → emit measurement + branch
-   - `FIX` of a subroutine → emit a callable gate definition (OpenQASM `gate` or QIR function)
-   - `SWITCH` → emit classical `if` (OpenQASM) or LLVM branch (QIR)
+### 6. Recursion elimination
+**OpenQASM has no general recursion.** All recursive `FIX` bodies must be eliminated before emission. Two cases:
+
+- **Statically bounded recursion**: if the recursion depth is a compile-time constant or an `input` parameter, unroll or lower to an OpenQASM `for` loop:
+  ```openqasm
+  for int i in [0:1:n-1] { body }
+  ```
+- **Unbounded recursion**: a **compile-time error**. FunQ programs with unbounded recursion cannot be compiled to OpenQASM. The programmer must supply a bound (e.g., via a type-level or expression-level annotation) or restructure the algorithm.
+
+Recursion elimination is done before defunctionalization because unrolling may eliminate some higher-order function uses.
+
+### 7. Defunctionalization
+**OpenQASM has no function values.** Closure conversion eliminates free variables but still produces closures as first-class data. Defunctionalization (Reynolds-style) converts all remaining higher-order functions into tagged data + a top-level dispatch function, eliminating function values entirely.
+
+This is required for FunQ programs that pass functions as arguments — e.g.:
+```funq
+cctrl g = \a phi -> if a then g phi else phi
+```
+Here `g` is a function-valued argument. After defunctionalization, `g` becomes a tag (an integer or constructor), and the dispatch function performs the appropriate gate call based on the tag.
+
+### 8. Qubit hoisting
+**OpenQASM requires all qubit declarations at top-level scope** — they are not allowed inside subroutines or conditional branches. FunQ's `init()` creates qubits dynamically inside expressions.
+
+This pass:
+1. Statically counts all qubit allocations in the program
+2. Emits `qubit q_i;` declarations at program scope
+3. Replaces each `PRIMOP(init, [], [q], [E])` with a `reset q_i;` statement that reuses the pre-declared qubit
+
+### 9. Tuple flattening
+**OpenQASM has no tuple type.** The CPS IR uses `RECORD`/`SELECT` for tuple construction and projection (e.g., qubit pairs returned from two-qubit gates like `cnot`). This pass replaces every tuple with a set of individual scalar variables and rewrites all `SELECT` projections as direct variable references.
+
+### 10. Gate/def classification
+Before emission, classify each closed `FIX`-bound function as either a `gate` or a `def`:
+
+- **`gate`**: the body contains only gate applications (no measurement, no classical variables, no classical control flow). Parameters are angles only. Use this for pure unitary operations:
+  ```openqasm
+  gate my_gate(theta) q { U(theta, 0, 0) q; }
+  ```
+- **`def`**: the body contains measurement, classical control flow, or classical variables. Takes qubits by reference and can return a classical value:
+  ```openqasm
+  def xmeasure(qubit q) -> bit { H q; return measure q; }
+  ```
+
+This classification is a concrete analysis step: traverse the body and check for `PRIMOP(measure,...)` or `SWITCH` nodes. If any are present, emit `def`; otherwise emit `gate`.
+
+### 11. Emit OpenQASM
+After the preceding passes the CPS expression is a flat graph of tail calls with no free variables, no function values, no tuples, and all qubits globally declared. Emission is a structural translation:
+
+| CPS | OpenQASM |
+|---|---|
+| `APP` of a gate `PRIMOP` | gate application statement |
+| `PRIMOP(measure, [q], [], [E0, E1])` | `bit c = measure q; if (c) { E1 } else { E0 }` |
+| `SWITCH(v, [E0, E1, ...])` | `switch (v) { case 0: E0; case 1: E1; ... }` |
+| `FIX` of a pure unitary | `gate` definition |
+| `FIX` of a subroutine with measurement | `def` definition |
+| Top-level `output` binding | `output` declaration |
+| Classical `PRIMOP(+, ...)` etc. | arithmetic expression |
+
+Type sizing for emission: FunQ's `Int` → `int[32]`, `Float` → `float[64]`, `Bool` → `bool`.
 
 ---
 
@@ -128,7 +186,10 @@ Following Appel's compiler organization (§1.4, pp. 9–10), adapted for FunQ:
 | All `PRIMOP`s have one continuation | `measure` has **two** continuations |
 | Free to copy/discard variables | Qubits are **linear** — must be used exactly once |
 | Closure conversion is an optimization | Closure conversion is **required** before emit |
-| `FIX` bodies may be recursive freely | Recursive circuit unrolling may require depth bounds |
+| Function values survive to emit | **No function values in OpenQASM** — defunctionalization required |
+| Recursion allowed at runtime | **No runtime recursion** — must eliminate statically |
+| No qubit allocation constraints | All qubits must be **hoisted to top-level scope** |
+| Tuples are a natural IR construct | **No tuple type** — must flatten before emit |
 
 The linearity constraint (no-cloning) means the optimizer must not beta-expand qubit-valued expressions more than once. This requires a linearity check during the optimization passes in step 4.
 
@@ -136,11 +197,9 @@ The linearity constraint (no-cloning) means the optimizer must not beta-expand q
 
 ## Worked Example: `bell00` and `output`
 
-Using the FunQ examples from `examples/bell00.funq` as a concrete case.
-
 ### Source
 
-```
+```funq
 bell00 : Unit -> (Qubit, Qubit)
 bell00 x =
   let
@@ -157,8 +216,7 @@ output =
 
 ### CPS Conversion of `bell00` (§5.1–5.4)
 
-Following Appel's conversion algorithm (Chapter 5), each function gains an extra
-argument `c` — the continuation to call with the result instead of returning.
+Each function gains an extra argument `c` — the continuation to call with the result.
 
 ```
 -- CPS version (pseudocode using FunQ-like syntax)
@@ -170,11 +228,7 @@ bell00 (x, c) =
   c result))))
 ```
 
-Each operation takes a continuation instead of returning a value. The nesting
-makes evaluation order explicit — `init a` before `init b`, `hgate` before `cnot`.
-
-In Appel's `cexp` datatype (§2.1, pp. 11–12), gates are `PRIMOP`s (primitive
-operations) since they are built-in operations on qubits with a single continuation:
+In Appel's `cexp` datatype (§2.1, pp. 11–12):
 
 ```
 FIX([(bell00, [x, c],
@@ -182,57 +236,62 @@ FIX([(bell00, [x, c],
        PRIMOP(init,  [],              [b],
        PRIMOP(hgate, [VAR a],         [a'],
        PRIMOP(cnot,  [VAR a', VAR b], [q1, q2],
-       APP(VAR c, [TUPLE(VAR q1, VAR q2)])
+       APP(VAR c, [RECORD([VAR q1, VAR q2])])
        )))))],
 E)
 ```
 
-The final `APP(VAR c, [...])` is the "return" — calling the continuation with the
-result instead of using a return statement. Since all calls are tail calls, there
-is no stack (§2.1, p. 14).
-
 ### CPS Conversion of `output` — Measurement Branches
-
-Measurement diverges from classical `PRIMOP`s: it is non-deterministic and must
-branch on the outcome. Following the two-continuation `PRIMOP` pattern from
-Appel §2.1 p. 13 (the `>` comparison example), `meas` takes **two continuations**
-— one for the `|0⟩` outcome and one for the `|1⟩` outcome:
 
 ```
 APP(VAR bell00, [UNIT, FUN (a, b) ->
   PRIMOP(meas, [VAR a], [],
     [ (* outcome |0> *)
       PRIMOP(meas, [VAR b], [],
-        [ APP(VAR k, [TUPLE(FALSE, FALSE)]),   (* b = |0> *)
-          APP(VAR k, [TUPLE(FALSE, TRUE)]) ]), (* b = |1> *)
+        [ APP(VAR k, [RECORD([FALSE, FALSE])]),   (* b = |0> *)
+          APP(VAR k, [RECORD([FALSE, TRUE])]) ]), (* b = |1> *)
       (* outcome |1> *)
       PRIMOP(meas, [VAR b], [],
-        [ APP(VAR k, [TUPLE(TRUE, FALSE)]),    (* b = |0> *)
-          APP(VAR k, [TUPLE(TRUE, TRUE)]) ])   (* b = |1> *)
+        [ APP(VAR k, [RECORD([TRUE, FALSE])]),    (* b = |0> *)
+          APP(VAR k, [RECORD([TRUE, TRUE])]) ])   (* b = |1> *)
     ])])
 ```
 
-Here `k` is the top-level continuation (the program's final answer). Each
-measurement spawns two continuations, so two measurements produce a tree of
-four possible `APP(VAR k, ...)` leaves — one per basis outcome.
+### After Qubit Hoisting + Tuple Flattening
+
+After hoisting, the two `PRIMOP(init)` calls become resets of global qubits. After tuple flattening, `RECORD([q1, q2])` and `SELECT` are replaced by direct variable references.
+
+```openqasm
+// Hoisted qubit declarations
+qubit q0;
+qubit q1;
+
+// bell00 emitted as a def (returns classical tuple → two output bits)
+// (or inlined after beta-contraction)
+
+// output
+reset q0; reset q1;
+h q0;
+cnot q0, q1;
+bit c0 = measure q0;
+bit c1 = measure q1;
+output bit[2] result;
+result[0] = c0;
+result[1] = c1;
+```
 
 ### Key Observations
 
 - **Gate `PRIMOP`**: one continuation — pure sequencing, no branching
-- **Measurement `PRIMOP`**: two continuations — this is where quantum branching
-  lives in the IR; it maps directly to OpenQASM's `if` on a measurement result
-  or QIR's branch-on-result instruction
-- **Nesting depth** of continuations directly encodes circuit depth and qubit
-  liveness: a qubit variable is live from where it is bound (by `init` or a gate
-  `PRIMOP`) until it is consumed (by another gate or `meas`)
-- **No stack**: every call is a tail call (`APP`), so the CPS expression compiles
-  to a flat sequence of instructions — exactly the structure of OpenQASM/QIR
+- **Measurement `PRIMOP`**: two continuations — maps to `bit c = measure q; if (c) { ... } else { ... }`
+- **Nesting depth** of continuations directly encodes circuit depth and qubit liveness
+- **No stack**: every call is a tail call (`APP`), so after all passes the CPS expression is a flat sequence of OpenQASM statements
 
 ---
 
 ## Next Steps / Chapters to Read
 
-- **Chapter 2** (§2.1–2.5): Full CPS datatype, closure conversion sketch, spilling — understand the complete IR before implementing it
-- **Chapter 5**: The CPS conversion algorithm — this is what we implement to translate FunQ AST → CPS
-- **Chapter 6**: Optimizations — especially β-contraction (§6.1) and eta reduction (§6.2), which simplify away trivial continuation wrappers generated by the conversion
-- **Chapter 10**: Closure conversion algorithm in detail — necessary to produce flat, emittable code
+- **Chapter 2** (§2.1–2.5): Full CPS datatype, closure conversion sketch, spilling
+- **Chapter 5**: The CPS conversion algorithm
+- **Chapter 6**: Optimizations — β-contraction (§6.1) and eta reduction (§6.2)
+- **Chapter 10**: Closure conversion algorithm in detail
