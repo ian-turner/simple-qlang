@@ -25,8 +25,9 @@ future QIR backend can lower symbolic constants differently without changing the
 
 - `src/OpenQASM.hs` now carries symbolic float constants as classical values and
   renders them directly into emitted QASM expressions.
-- OpenQASM output declarations are now typed per output leaf, so float outputs
-  emit as `float[64] output_i;` instead of assuming every output is a `bit`.
+- OpenQASM output declarations are now type-aware, so homogeneous float outputs
+  can emit as `array[float[64], n] output;` and mixed outputs still fall back
+  to per-leaf declarations instead of assuming every output is a `bit`.
 - Integer-only paths such as constructor tags and `switch` scrutinees still
   require integer classical values.
 

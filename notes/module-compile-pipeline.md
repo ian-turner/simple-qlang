@@ -40,7 +40,13 @@ record-shape analysis, interface flattening, and callable classification:
 
 ## Current Limitation
 
-The refactor itself is still just infrastructure. The follow-on passes it
-enabled are now landed, but the final backend step is still missing:
+The refactor itself was infrastructure for later passes. Those follow-on passes
+are now landed, and the backend no longer stops before emission.
 
-- OpenQASM emission from the flattened, closed CPS
+Current backend limitations are refinement issues rather than missing
+infrastructure:
+
+- reusable OpenQASM `gate` / `def` emission is still not implemented
+- bounded recursion still relies on budget-unrolling rather than explicit loop
+  lowering
+- generated control flow still duplicates shared post-branch continuations

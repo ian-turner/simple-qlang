@@ -1,6 +1,6 @@
 # FunQ
 
-FunQ is a functional quantum programming language with linear types. It
+FunQ is a functional quantum programming language with planned linear types. It
 currently targets OpenQASM, with the middle end structured so a future QIR
 backend can reuse the same normalized IR.
 
@@ -14,15 +14,17 @@ See `notes/` for chapter-by-chapter notes on that adaptation.
 
 FunQ looks like a small ML-family language. It has:
 
-- **Linear types for qubits** — qubits cannot be copied or discarded implicitly,
-  enforcing the no-cloning theorem at compile time
-- **Quantum primitives** — `init`, `hgate`, `xgate`, `zgate`, `cnot`, `meas`
+- **Linear quantum semantics** — the language is designed around linear qubit
+  usage, though the linear type checker is still deferred
+- **Quantum primitives** — `init`, `hgate`, `xgate`, `zgate`, `cnot`, `sgate`,
+  `tgate`, `csgate`, `ctgate`, `cpgate`, `meas`
   built into the language
 - **Higher-order functions** — functions are first-class; continuations and
   classically-controlled gates are expressible directly
 - **Pattern matching** — tuples, ADTs, wildcards
 - **Algebraic data types** — `data` declarations with constructors
-- **Recursion** — general recursion supported; termination not checked
+- **Recursion** — local recursive `fix` groups are rejected; a bounded top-level
+  self-recursive subset is supported by backend unrolling
 
 ### Built-in types
 
@@ -47,6 +49,11 @@ FunQ looks like a small ML-family language. It has:
 | `xgate` | `Qubit -> Qubit` | Pauli-X (NOT) gate |
 | `zgate` | `Qubit -> Qubit` | Pauli-Z gate |
 | `cnot` | `Qubit -> Qubit -> (Qubit, Qubit)` | Controlled-NOT gate |
+| `sgate` | `Qubit -> Qubit` | Phase gate |
+| `tgate` | `Qubit -> Qubit` | T gate |
+| `csgate` | `Qubit -> Qubit -> (Qubit, Qubit)` | Controlled-S gate |
+| `ctgate` | `Qubit -> Qubit -> (Qubit, Qubit)` | Controlled-T gate |
+| `cpgate` | `Int -> Qubit -> Qubit -> (Qubit, Qubit)` | Controlled phase gate `cp(pi/2^k)` |
 
 Float literals are preserved symbolically through the middle end. That means
 surface forms such as `pi` and `1.5` can reach OpenQASM emission unchanged.
@@ -145,7 +152,8 @@ done
 ```
 
 The compiler runs a full pipeline from source to OpenQASM 3.0 and prints only
-the generated OpenQASM to stdout.
+the generated OpenQASM to stdout. There is no automated test suite yet; verify
+changes by building and running representative examples.
 
 ---
 
@@ -166,6 +174,6 @@ the generated OpenQASM to stdout.
 | Gate/def classification | Done (conservative first pass) |
 | Bounded recursion (unroll) | Done (first cut) |
 | Register spilling | Deferred |
-| OpenQASM emission | Done (first cut; inlines from `output`) |
+| OpenQASM emission | Done (first cut; inlines from `output`, emits output arrays for homogeneous results, and renders boolean two-arm branches as `if/else`) |
 
 See `notes/appel/index.md` for the mapping of remaining stages to Appel chapters.

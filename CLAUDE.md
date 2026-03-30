@@ -52,8 +52,8 @@ running the examples manually.
 
 ## Project goal
 
-FunQ is a functional quantum language with linear types that currently targets
-OpenQASM. The middle end is intended to stay reusable for a future QIR
+FunQ is a functional quantum language with planned linear types that currently
+targets OpenQASM. The middle end is intended to stay reusable for a future QIR
 backend. The planned compilation pipeline follows Appel's *Compiling with
 Continuations* (1992). See `notes/cps-compilation-strategy.md` for the full
 pipeline with required/optional classification.
@@ -65,13 +65,15 @@ introducing any optional optimizations or the linear type checker.
 1. Parse + scope resolve — *done*
 2. Lower to λ-calculus IR (Appel Ch 4) — *done*
 3. CPS conversion (Appel Ch 5) — *done*
-4. Recursion elimination — *done* (errors on recursive programs; unrolling deferred)
+4. Recursion elimination — *done* for local recursion, with a first bounded
+   top-level self-recursive subset handled by `src/BoundedRecursion.hs`
 5. Closure conversion (Appel Ch 10) — *done*
 6. Defunctionalization — *done*
 7. Qubit hoisting — *done*
 8. Tuple/record flattening — *done* for tuple/data-flow records
 9. Gate/def classification — *done* as a conservative top-level pass
-10. Emit OpenQASM — *first cut done* via entrypoint-driven emission
+10. Emit OpenQASM — *first cut done* via entrypoint-driven emission, including
+    homogeneous output arrays and boolean two-arm `if/else` rendering
 
 ### Deferred until after the required pipeline works
 - Linear type checking (assumes well-typed, linear input for now)

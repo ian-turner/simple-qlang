@@ -108,6 +108,10 @@ bit c = measure q;
 SWITCH(VAR bit, [E_false, E_true])
 ```
 
+The current OpenQASM emitter still lowers that CPS shape, but when the branch is
+dynamic and has exactly two arms it renders the result as `if/else` instead of
+`switch`.
+
 ### Recursive/parameterized circuits → `FIX`
 
 Recursive quantum algorithms (QFT, quantum walk, etc.) use `FIX` to define mutually recursive functions. Before emission, all recursion must be eliminated (see Recursion Elimination below).
@@ -319,7 +323,8 @@ Structural translation from the flat, closed, recursion-free CPS:
 | CPS | OpenQASM |
 |---|---|
 | `APP` of a gate `PRIMOP` | gate application statement |
-| `PRIMOP(measure, [q], [], [E0, E1])` | `bit c = measure q; if (c) { E1 } else { E0 }` |
+| `PRIMOP(measure, [q], [c], [E])` | `bit c = measure q;` then continue in `E` |
+| `SWITCH(v, [E0, E1])` | `if (v == 1) { E1 } else { E0 }` |
 | `SWITCH(v, [E0, E1, ...])` | `switch (v) { case 0: E0; case 1: E1; ... }` |
 | `FIX` of a pure unitary | `gate` definition |
 | `FIX` of a subroutine with measurement | `def` definition |
@@ -475,9 +480,9 @@ h q0;
 cnot q0, q1;
 bit c0 = measure q0;
 bit c1 = measure q1;
-output bit[2] result;
-result[0] = c0;
-result[1] = c1;
+bit[2] output;
+output[0] = c0;
+output[1] = c1;
 ```
 
 ### Key Observations

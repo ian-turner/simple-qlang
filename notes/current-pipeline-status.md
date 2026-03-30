@@ -13,8 +13,6 @@ The current pipeline structure includes:
 - whole-module record-shape inference in `src/RecordShape.hs`
 - a first interprocedural interface-flattening pass in `src/ModuleRecordFlatten.hs`
 - a conservative local record-flattening pass in `src/RecordFlatten.hs`
-- debug output for interface-flattened IR in `src/Main.hs`
-- debug output for record-flattened IR in `src/Main.hs`
 
 That means tuple/record flattening is no longer "not started". A first,
 correctness-oriented subset is implemented and wired into the pipeline.
@@ -71,8 +69,10 @@ That emitter currently:
   label cycles
 - preserves symbolic float constants through to emission so values such as
   `pi` appear directly in generated OpenQASM
-- emits typed output declarations per leaf (`bit`, `bool`, `int[32]`,
-  `float[64]`) instead of assuming every output is a measurement bit
+- emits homogeneous multi-leaf outputs as OpenQASM arrays / bit vectors and
+  falls back to per-leaf declarations only for mixed-type outputs
+- renders dynamic two-arm boolean-style branches as OpenQASM `if/else`, while
+  larger fanout still emits as `switch`
 
 Gate/`def` classification remains implemented as a conservative top-level pass
 over the interface-flattened CPS in `src/GateDef.hs`.
