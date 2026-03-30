@@ -8,6 +8,7 @@ import Control.Monad.State.Strict
 import Data.List (intercalate)
 
 import CPSExp
+import BoundedRecursion (TopLevelFunction(..), extractTopLevelFunction)
 import CompilePipeline
 import LambdaIR (PrimOp(..))
 import Utils (Variable)
@@ -15,6 +16,7 @@ import Utils (Variable)
 
 data Callable
   = CallableFun [Variable] CExp Env
+  | CallableTopLevel String TopLevelFunction
   | CallablePrim PrimOp [ValueRep]
   | CallableOutput
 
@@ -23,6 +25,7 @@ data ValueRep
   = ValueCallable Callable
   | ValueClassical ClassicalRep
   | ValueQubit Int
+  | ValueCtor Int ValueRep
   | ValueRecord [ValueRep]
   | ValueSlice [ValueRep]
   | ValueUnit
@@ -48,6 +51,7 @@ data EmitState = EmitState
   , emitOutputArity :: Maybe Int
   , emitTopLevelCache :: Map.Map String ValueRep
   , emitTopLevelInProgress :: Set.Set String
+  , emitRecursiveBudget :: Int
   }
 
 
@@ -69,6 +73,7 @@ emitOpenQASM compiledModule = do
           , emitOutputArity = Nothing
           , emitTopLevelCache = Map.empty
           , emitTopLevelInProgress = Set.empty
+          , emitRecursiveBudget = 10000
           }
   (stmts, finalState) <- runStateT (emitEntry moduleEnv outputExp) initState
   outputArity <-
@@ -136,10 +141,12 @@ emitEntry moduleEnv expr =
 
 assignOutputs :: [ValueRep] -> EmitM (EmitResult ())
 assignOutputs values = do
-  updateOutputArity (length values)
+  let flatValues = concatMap flattenOutputValues values
+  mapM_ ensureClassicalOutput flatValues
+  updateOutputArity (length flatValues)
   let stmts =
         [ StmtAssign ("output_" ++ show i) (renderClassicalValue value)
-        | (i, value) <- zip [0 :: Int ..] values
+        | (i, value) <- zip [0 :: Int ..] flatValues
         ]
   pure EmitResult { resultStmts = stmts, resultValue = () }
 
@@ -176,36 +183,65 @@ runExp
   -> ([ValueRep] -> EmitM (EmitResult a))
   -> EmitM (EmitResult a)
 runExp moduleEnv env (CRecord fields v body) haltK = do
-  fieldVals <- mapM (evalField moduleEnv env) fields
-  runExp moduleEnv (Map.insert v (ValueRecord fieldVals) env) body haltK
+  fieldResults <- mapM (evalField moduleEnv env) fields
+  let recordValue = buildRecordValue (map resultValue fieldResults)
+  emitted <- runExp moduleEnv (Map.insert v recordValue env) body haltK
+  pure emitted { resultStmts = concatMap resultStmts fieldResults ++ resultStmts emitted }
 
 runExp moduleEnv env (CSelect i val v body) haltK = do
-  selected <- selectField i =<< evalValue moduleEnv env val
-  runExp moduleEnv (Map.insert v selected env) body haltK
+  valueResult <- evalValue moduleEnv env val
+  selected <-
+    case resultValue valueResult of
+      ValueClassical (ClassicalConst n) ->
+        lift $
+          Left
+            ( "OpenQASM emission failed: select "
+                ++ show i
+                ++ " from "
+                ++ show val
+                ++ " saw scalar "
+                ++ show n
+                ++ "."
+            )
+      selectedValue ->
+        selectField i selectedValue
+  emitted <- runExp moduleEnv (Map.insert v selected env) body haltK
+  pure emitted { resultStmts = resultStmts valueResult ++ resultStmts emitted }
 
 runExp moduleEnv env (COffset off val v body) haltK = do
-  shifted <- offsetValue off =<< evalValue moduleEnv env val
-  runExp moduleEnv (Map.insert v shifted env) body haltK
+  valueResult <- evalValue moduleEnv env val
+  shifted <- offsetValue off (resultValue valueResult)
+  emitted <- runExp moduleEnv (Map.insert v shifted env) body haltK
+  pure emitted { resultStmts = resultStmts valueResult ++ resultStmts emitted }
 
 runExp moduleEnv env (CApp fn args) haltK =
   case fn of
     VLabel "halt" -> do
-      argVals <- mapM (evalValue moduleEnv env) args
-      haltK argVals
+      argResults <- mapM (evalValue moduleEnv env) args
+      halted <- haltK (map resultValue argResults)
+      pure halted { resultStmts = concatMap resultStmts argResults ++ resultStmts halted }
     _ -> do
-      fnVal <- evalValue moduleEnv env fn
-      argVals <- mapM (evalValue moduleEnv env) args
-      applyCallable moduleEnv fnVal argVals haltK
+      fnResult <- evalValue moduleEnv env fn
+      argResults <- mapM (evalValue moduleEnv env) args
+      applied <- applyCallable moduleEnv (resultValue fnResult) (map resultValue argResults) haltK
+      pure
+        applied
+          { resultStmts =
+              resultStmts fnResult ++ concatMap resultStmts argResults ++ resultStmts applied
+          }
 
 runExp moduleEnv env (CFix defs body) haltK =
   runExp moduleEnv (bindFix env defs) body haltK
 
 runExp moduleEnv env (CSwitch val arms) haltK = do
-  scrutinee <- evalClassicalValue =<< evalValue moduleEnv env val
+  valueResult <- evalValue moduleEnv env val
+  scrutinee <- evalSwitchScrutinee (resultValue valueResult)
   case scrutinee of
     ClassicalConst n
       | n >= 0 && n < length arms ->
-          runExp moduleEnv env (arms !! n) haltK
+          do
+            emitted <- runExp moduleEnv env (arms !! n) haltK
+            pure emitted { resultStmts = resultStmts valueResult ++ resultStmts emitted }
     ClassicalConst n ->
       lift $
         Left
@@ -222,7 +258,7 @@ runExp moduleEnv env (CSwitch val arms) haltK = do
         (firstArm : _) ->
           pure $
             EmitResult
-              { resultStmts = [StmtSwitch name (zip [0 :: Int ..] (map resultStmts armResults))]
+              { resultStmts = resultStmts valueResult ++ [StmtSwitch name (zip [0 :: Int ..] (map resultStmts armResults))]
               , resultValue = resultValue firstArm
               }
 
@@ -240,14 +276,24 @@ bindFix env defs =
         env
 
 
-evalField :: ModuleEnv -> Env -> (Value, AccessPath) -> EmitM ValueRep
-evalField moduleEnv env (val, path) =
-  applyPath path =<< evalValue moduleEnv env val
+evalField :: ModuleEnv -> Env -> (Value, AccessPath) -> EmitM (EmitResult ValueRep)
+evalField moduleEnv env (val, path) = do
+  valueResult <- evalValue moduleEnv env val
+  fieldValue <- applyPath path (resultValue valueResult)
+  pure EmitResult
+    { resultStmts = resultStmts valueResult
+    , resultValue = fieldValue
+    }
 
 
 applyPath :: AccessPath -> ValueRep -> EmitM ValueRep
 applyPath (OFFp 0) value =
   pure value
+applyPath (OFFp n) (ValueCtor tag payload)
+  | n <= 0 =
+      pure (ValueCtor tag payload)
+  | otherwise =
+      applyPath (OFFp (n - 1)) (ValueRecord [payload, ValueClassical (ClassicalConst tag)])
 applyPath (OFFp n) (ValueRecord fields) =
   pure (ValueSlice (drop n fields))
 applyPath (OFFp n) (ValueSlice fields) =
@@ -264,6 +310,10 @@ applyPath (SELp i path) value =
 
 
 selectField :: Int -> ValueRep -> EmitM ValueRep
+selectField 0 (ValueCtor _ payload) =
+  pure payload
+selectField 1 (ValueCtor tag _) =
+  pure (ValueClassical (ClassicalConst tag))
 selectField i (ValueRecord fields)
   | i >= 0 && i < length fields = pure (fields !! i)
 selectField i (ValueSlice fields)
@@ -274,12 +324,17 @@ selectField i value =
       ( "OpenQASM emission failed: cannot select field "
           ++ show i
           ++ " from "
-          ++ showValueRep value
+          ++ showDeepValueRep value
           ++ "."
       )
 
 
 offsetValue :: Int -> ValueRep -> EmitM ValueRep
+offsetValue 0 value =
+  pure value
+offsetValue off (ValueCtor tag payload)
+  | off > 0 =
+      offsetValue (off - 1) (ValueRecord [payload, ValueClassical (ClassicalConst tag)])
 offsetValue off (ValueRecord fields) =
   pure (ValueSlice (drop off fields))
 offsetValue off (ValueSlice fields) =
@@ -295,29 +350,29 @@ offsetValue off value =
       )
 
 
-evalValue :: ModuleEnv -> Env -> Value -> EmitM ValueRep
+evalValue :: ModuleEnv -> Env -> Value -> EmitM (EmitResult ValueRep)
 evalValue _ env (VVar v) =
   case Map.lookup v env of
-    Just value -> pure value
+    Just value -> pure EmitResult { resultStmts = [], resultValue = value }
     Nothing ->
       lift $
         Left ("OpenQASM emission failed: unbound variable " ++ show v ++ ".")
 evalValue _ _ (VInt n) =
-  pure (ValueClassical (ClassicalConst n))
+  pure EmitResult { resultStmts = [], resultValue = ValueClassical (ClassicalConst n) }
 evalValue _ _ (VQubit i) =
-  pure (ValueQubit i)
+  pure EmitResult { resultStmts = [], resultValue = ValueQubit i }
 evalValue _ _ VUnit =
-  pure ValueUnit
+  pure EmitResult { resultStmts = [], resultValue = ValueUnit }
 evalValue moduleEnv _ (VLabel name) =
   evalTopLevelValue moduleEnv name
 
 
-evalTopLevelValue :: ModuleEnv -> String -> EmitM ValueRep
+evalTopLevelValue :: ModuleEnv -> String -> EmitM (EmitResult ValueRep)
 evalTopLevelValue moduleEnv name = do
   cached <- gets (Map.lookup name . emitTopLevelCache)
   case cached of
     Just value ->
-      pure value
+      pure EmitResult { resultStmts = [], resultValue = value }
     Nothing ->
       do
         inProgress <- gets (Set.member name . emitTopLevelInProgress)
@@ -334,6 +389,16 @@ evalTopLevelValue moduleEnv name = do
               Nothing ->
                 lift $
                   Left ("OpenQASM emission failed: unknown top-level label `" ++ name ++ "`.")
+              Just expr
+                | Just topLevelFun <- extractTopLevelFunction expr -> do
+                    let value = ValueCallable (CallableTopLevel name topLevelFun)
+                    modify
+                      (\st ->
+                        st
+                          { emitTopLevelCache = Map.insert name value (emitTopLevelCache st)
+                          }
+                      )
+                    pure EmitResult { resultStmts = [], resultValue = value }
               Just expr -> do
                 modify (\st -> st { emitTopLevelInProgress = Set.insert name (emitTopLevelInProgress st) })
                 result <- runExp moduleEnv Map.empty expr captureValue
@@ -343,14 +408,9 @@ evalTopLevelValue moduleEnv name = do
                     let value = resultValue result
                     in do
                       modify (\st -> st { emitTopLevelCache = Map.insert name value (emitTopLevelCache st) })
-                      pure value
+                      pure EmitResult { resultStmts = [], resultValue = value }
                   _ ->
-                    lift $
-                      Left
-                        ( "OpenQASM emission failed: top-level label `"
-                            ++ name
-                            ++ "` produced statements while being evaluated as a value."
-                        )
+                    pure result
   where
     captureValue values =
       case values of
@@ -387,6 +447,8 @@ applyCallable moduleEnv (ValueCallable (CallableFun params body closureEnv)) arg
           )
   where
     callEnv = Map.union (Map.fromList (zip params args)) closureEnv
+applyCallable moduleEnv (ValueCallable (CallableTopLevel name topLevelFun)) args haltK =
+  applyTopLevelCallable moduleEnv name topLevelFun args haltK
 applyCallable moduleEnv (ValueCallable (CallablePrim op captured)) args haltK =
   applyPrimitiveCallable moduleEnv op captured args haltK
 applyCallable _ (ValueCallable CallableOutput) args haltK =
@@ -398,6 +460,46 @@ applyCallable _ value _ _ =
           ++ showValueRep value
           ++ "."
       )
+
+
+applyTopLevelCallable
+  :: ModuleEnv
+  -> String
+  -> TopLevelFunction
+  -> [ValueRep]
+  -> ([ValueRep] -> EmitM (EmitResult a))
+  -> EmitM (EmitResult a)
+applyTopLevelCallable moduleEnv name topLevelFun args haltK
+  | length (tlfParams topLevelFun) /= length args =
+      lift $
+        Left
+          ( "OpenQASM emission failed: arity mismatch for top-level declaration `"
+              ++ name
+              ++ "`. Expected "
+              ++ show (length (tlfParams topLevelFun))
+              ++ " arguments, got "
+              ++ show (length args)
+              ++ "."
+          )
+  | otherwise =
+      do
+        ensureRecursiveBudget name
+        runExp moduleEnv (Map.fromList (zip (tlfParams topLevelFun) args)) (tlfBody topLevelFun) haltK
+
+
+ensureRecursiveBudget :: String -> EmitM ()
+ensureRecursiveBudget name = do
+  remaining <- gets emitRecursiveBudget
+  if remaining <= 0
+    then
+      lift $
+        Left
+          ( "OpenQASM emission failed: bounded recursion budget exhausted while expanding `"
+              ++ name
+              ++ "`. Refusing to continue unrolling."
+          )
+    else
+      modify (\st -> st { emitRecursiveBudget = remaining - 1 })
 
 
 applyPrimitiveCallable
@@ -443,12 +545,15 @@ runPrimOp
   -> ([ValueRep] -> EmitM (EmitResult a))
   -> EmitM (EmitResult a)
 runPrimOp moduleEnv env op args results conts haltK = do
-  argVals <- mapM (evalValue moduleEnv env) args
+  argResults <- mapM (evalValue moduleEnv env) args
+  let argVals = map resultValue argResults
+      argStmts = concatMap resultStmts argResults
   if length argVals < primArity op
     then case (results, conts) of
       ([result], [cont]) -> do
         let env' = Map.insert result (ValueCallable (CallablePrim op argVals)) env
-        runExp moduleEnv env' cont haltK
+        emitted <- runExp moduleEnv env' cont haltK
+        pure emitted { resultStmts = argStmts ++ resultStmts emitted }
       _ ->
         lift $
           Left
@@ -457,7 +562,9 @@ runPrimOp moduleEnv env op args results conts haltK = do
                 ++ " must bind one function value."
             )
     else if length argVals == primArity op
-      then runDirectPrimOp moduleEnv env op argVals results conts haltK
+      then do
+        emitted <- runDirectPrimOp moduleEnv env op argVals results conts haltK
+        pure emitted { resultStmts = argStmts ++ resultStmts emitted }
       else
         lift $
           Left
@@ -479,38 +586,48 @@ runDirectPrimOp
 runDirectPrimOp moduleEnv env PInit [ValueUnit] [q] [cont] haltK = do
   slot <- freshQubit
   runExp moduleEnv (Map.insert q (ValueQubit slot) env) cont haltK
-runDirectPrimOp moduleEnv env PHGate [ValueQubit q] [result] [cont] haltK = do
+runDirectPrimOp moduleEnv env PHGate [arg] [result] [cont] haltK
+  | Just q <- extractQubitArg arg = do
   emitted <- runExp moduleEnv (Map.insert result (ValueQubit q) env) cont haltK
   pure emitted { resultStmts = StmtGate "h" [q] : resultStmts emitted }
-runDirectPrimOp moduleEnv env PXGate [ValueQubit q] [result] [cont] haltK = do
+runDirectPrimOp moduleEnv env PXGate [arg] [result] [cont] haltK
+  | Just q <- extractQubitArg arg = do
   emitted <- runExp moduleEnv (Map.insert result (ValueQubit q) env) cont haltK
   pure emitted { resultStmts = StmtGate "x" [q] : resultStmts emitted }
-runDirectPrimOp moduleEnv env PZGate [ValueQubit q] [result] [cont] haltK = do
+runDirectPrimOp moduleEnv env PZGate [arg] [result] [cont] haltK
+  | Just q <- extractQubitArg arg = do
   emitted <- runExp moduleEnv (Map.insert result (ValueQubit q) env) cont haltK
   pure emitted { resultStmts = StmtGate "z" [q] : resultStmts emitted }
-runDirectPrimOp moduleEnv env PCNot [ValueQubit q0, ValueQubit q1] [r0, r1] [cont] haltK = do
+runDirectPrimOp moduleEnv env PCNot [arg0, arg1] [r0, r1] [cont] haltK
+  | Just q0 <- extractQubitArg arg0
+  , Just q1 <- extractQubitArg arg1 = do
+  let env' =
+        Map.insert r1 (ValueQubit q1) (Map.insert r0 (ValueQubit q0) env)
   emitted <- runExp moduleEnv env' cont haltK
   pure emitted { resultStmts = StmtGate "cx" [q0, q1] : resultStmts emitted }
-  where
-    env' =
-      Map.insert r1 (ValueQubit q1) (Map.insert r0 (ValueQubit q0) env)
-runDirectPrimOp moduleEnv env PMeas [ValueQubit q] [result] [cont] haltK = do
+runDirectPrimOp moduleEnv env PMeas [arg] [result] [cont] haltK
+  | Just q <- extractQubitArg arg = do
   bitName <- freshBitName
   let env' = Map.insert result (ValueClassical (ClassicalVar bitName)) env
   emitted <- runExp moduleEnv env' cont haltK
   pure emitted { resultStmts = StmtMeasure bitName q : resultStmts emitted }
 runDirectPrimOp moduleEnv env op args [result] [cont] haltK
   | isClassicalPrim op = do
-      tempName <- freshTempName
-      let env' = Map.insert result (ValueClassical (ClassicalVar tempName)) env
-          declType = if isBooleanPrim op then "bool" else "int[32]"
-      emitted <- runExp moduleEnv env' cont haltK
-      pure
-        emitted
-          { resultStmts =
-              StmtDeclareAssign declType tempName (renderClassicalPrim op args)
-                : resultStmts emitted
-          }
+      case evalClassicalPrimConst op args of
+        Just constValue -> do
+          let env' = Map.insert result (ValueClassical (ClassicalConst constValue)) env
+          runExp moduleEnv env' cont haltK
+        Nothing -> do
+          tempName <- freshTempName
+          let env' = Map.insert result (ValueClassical (ClassicalVar tempName)) env
+              declType = if isBooleanPrim op then "bool" else "int[32]"
+          emitted <- runExp moduleEnv env' cont haltK
+          pure
+            emitted
+              { resultStmts =
+                  StmtDeclareAssign declType tempName (renderClassicalPrim op args)
+                    : resultStmts emitted
+              }
 runDirectPrimOp _ _ op args results conts _ =
   lift $
     Left
@@ -522,7 +639,9 @@ runDirectPrimOp _ _ op args results conts _ =
           ++ show (length results)
           ++ " results, and "
           ++ show (length conts)
-          ++ " continuations."
+          ++ " continuations. Args were ["
+          ++ intercalate ", " (map showDeepValueRep args)
+          ++ "]."
       )
 
 
@@ -533,19 +652,25 @@ runPrimitiveExecution
   -> ValueRep
   -> ([ValueRep] -> EmitM (EmitResult a))
   -> EmitM (EmitResult a)
-runPrimitiveExecution moduleEnv PHGate [ValueQubit q] cont haltK = do
+runPrimitiveExecution moduleEnv PHGate [arg] cont haltK
+  | Just q <- extractQubitArg arg = do
   emitted <- applyCallable moduleEnv cont [ValueQubit q] haltK
   pure emitted { resultStmts = StmtGate "h" [q] : resultStmts emitted }
-runPrimitiveExecution moduleEnv PXGate [ValueQubit q] cont haltK = do
+runPrimitiveExecution moduleEnv PXGate [arg] cont haltK
+  | Just q <- extractQubitArg arg = do
   emitted <- applyCallable moduleEnv cont [ValueQubit q] haltK
   pure emitted { resultStmts = StmtGate "x" [q] : resultStmts emitted }
-runPrimitiveExecution moduleEnv PZGate [ValueQubit q] cont haltK = do
+runPrimitiveExecution moduleEnv PZGate [arg] cont haltK
+  | Just q <- extractQubitArg arg = do
   emitted <- applyCallable moduleEnv cont [ValueQubit q] haltK
   pure emitted { resultStmts = StmtGate "z" [q] : resultStmts emitted }
-runPrimitiveExecution moduleEnv PCNot [ValueQubit q0, ValueQubit q1] cont haltK = do
+runPrimitiveExecution moduleEnv PCNot [arg0, arg1] cont haltK
+  | Just q0 <- extractQubitArg arg0
+  , Just q1 <- extractQubitArg arg1 = do
   emitted <- applyCallable moduleEnv cont [ValueQubit q0, ValueQubit q1] haltK
   pure emitted { resultStmts = StmtGate "cx" [q0, q1] : resultStmts emitted }
-runPrimitiveExecution moduleEnv PMeas [ValueQubit q] cont haltK = do
+runPrimitiveExecution moduleEnv PMeas [arg] cont haltK
+  | Just q <- extractQubitArg arg = do
   bitName <- freshBitName
   emitted <- applyCallable moduleEnv cont [ValueClassical (ClassicalVar bitName)] haltK
   pure emitted { resultStmts = StmtMeasure bitName q : resultStmts emitted }
@@ -606,6 +731,46 @@ renderClassicalPrim op args =
   error ("unhandled classical primitive rendering: " ++ show op ++ " " ++ show (length args))
 
 
+evalClassicalPrimConst :: PrimOp -> [ValueRep] -> Maybe Int
+evalClassicalPrimConst op args =
+  mapM asConst args >>= eval op
+  where
+    asConst (ValueClassical (ClassicalConst n)) = Just n
+    asConst _ = Nothing
+
+    boolToInt False = 0
+    boolToInt True = 1
+
+    eval PAdd [a, b] = Just (a + b)
+    eval PSub [a, b] = Just (a - b)
+    eval PMul [a, b] = Just (a * b)
+    eval PDiv [a, b]
+      | b == 0 = Nothing
+      | otherwise = Just (a `div` b)
+    eval PEq [a, b] = Just (boolToInt (a == b))
+    eval PLt [a, b] = Just (boolToInt (a < b))
+    eval PGt [a, b] = Just (boolToInt (a > b))
+    eval PLe [a, b] = Just (boolToInt (a <= b))
+    eval PGe [a, b] = Just (boolToInt (a >= b))
+    eval PAnd [a, b] = Just (boolToInt (a /= 0 && b /= 0))
+    eval POr [a, b] = Just (boolToInt (a /= 0 || b /= 0))
+    eval PNot [a] = Just (boolToInt (a == 0))
+    eval _ _ = Nothing
+
+
+extractQubitArg :: ValueRep -> Maybe Int
+extractQubitArg (ValueQubit q) =
+  Just q
+extractQubitArg (ValueRecord (headValue : _)) =
+  extractQubitArg headValue
+extractQubitArg (ValueSlice (headValue : _)) =
+  extractQubitArg headValue
+extractQubitArg (ValueCtor _ payload) =
+  extractQubitArg payload
+extractQubitArg _ =
+  Nothing
+
+
 evalClassicalValue :: ValueRep -> EmitM ClassicalRep
 evalClassicalValue (ValueClassical value) =
   pure value
@@ -616,6 +781,17 @@ evalClassicalValue value =
           ++ showValueRep value
           ++ "."
       )
+
+
+evalSwitchScrutinee :: ValueRep -> EmitM ClassicalRep
+evalSwitchScrutinee (ValueCtor tag _) =
+  pure (ClassicalConst tag)
+evalSwitchScrutinee (ValueRecord [_, ValueClassical tag]) =
+  pure tag
+evalSwitchScrutinee (ValueSlice (_ : ValueClassical tag : _)) =
+  pure tag
+evalSwitchScrutinee value =
+  evalClassicalValue value
 
 
 renderClassicalValue :: ValueRep -> String
@@ -651,9 +827,94 @@ showValueRep (ValueCallable _) = "<callable>"
 showValueRep (ValueClassical (ClassicalConst n)) = show n
 showValueRep (ValueClassical (ClassicalVar name)) = name
 showValueRep (ValueQubit i) = "q[" ++ show i ++ "]"
+showValueRep (ValueCtor tag _) = "<ctor:" ++ show tag ++ ">"
 showValueRep (ValueRecord fields) = "<record:" ++ show (length fields) ++ ">"
 showValueRep (ValueSlice fields) = "<slice:" ++ show (length fields) ++ ">"
 showValueRep ValueUnit = "()"
+
+
+showDeepValueRep :: ValueRep -> String
+showDeepValueRep (ValueRecord fields) =
+  "{" ++ intercalate ", " (map showValueRep fields) ++ "}"
+showDeepValueRep (ValueCtor tag payload) =
+  "<ctor " ++ show tag ++ " " ++ showDeepValueRep payload ++ ">"
+showDeepValueRep (ValueSlice fields) =
+  "<slice {" ++ intercalate ", " (map showValueRep fields) ++ "}>"
+showDeepValueRep value =
+  showValueRep value
+
+
+flattenOutputValues :: ValueRep -> [ValueRep]
+flattenOutputValues value =
+  case flattenListValue value of
+    Just elements ->
+      concatMap flattenOutputValues elements
+    Nothing ->
+      flattenRecordLeaves value
+
+
+flattenListValue :: ValueRep -> Maybe [ValueRep]
+flattenListValue (ValueClassical (ClassicalConst 0)) =
+  Just []
+flattenListValue (ValueCtor 1 payload) = do
+  (headValue, tailValue) <- splitConsPayload payload
+  tailValues <- flattenListValue tailValue
+  Just (headValue : tailValues)
+flattenListValue (ValueRecord [payload, ValueClassical (ClassicalConst 1)]) = do
+  (headValue, tailValue) <- splitConsPayload payload
+  tailValues <- flattenListValue tailValue
+  Just (headValue : tailValues)
+flattenListValue _ =
+  Nothing
+
+
+splitConsPayload :: ValueRep -> Maybe (ValueRep, ValueRep)
+splitConsPayload (ValueRecord [headValue, tailValue]) =
+  Just (headValue, tailValue)
+splitConsPayload (ValueSlice (headValue : tailValue : _)) =
+  Just (headValue, tailValue)
+splitConsPayload _ =
+  Nothing
+
+
+flattenRecordLeaves :: ValueRep -> [ValueRep]
+flattenRecordLeaves (ValueRecord fields) =
+  concatMap flattenRecordLeaves fields
+flattenRecordLeaves (ValueCtor _ payload) =
+  flattenRecordLeaves payload
+flattenRecordLeaves (ValueSlice fields) =
+  concatMap flattenRecordLeaves fields
+flattenRecordLeaves ValueUnit =
+  []
+flattenRecordLeaves leaf =
+  [leaf]
+
+
+ensureClassicalOutput :: ValueRep -> EmitM ()
+ensureClassicalOutput (ValueClassical _) =
+  pure ()
+ensureClassicalOutput value =
+  lift $
+    Left
+      ( "OpenQASM emission failed: output flattening produced non-classical leaf "
+          ++ showValueRep value
+          ++ "."
+      )
+
+
+buildRecordValue :: [ValueRep] -> ValueRep
+buildRecordValue [payload, ValueClassical (ClassicalConst tag)]
+  | isCtorPayload payload =
+  ValueCtor tag payload
+buildRecordValue fields =
+  ValueRecord fields
+
+
+isCtorPayload :: ValueRep -> Bool
+isCtorPayload (ValueRecord _) = True
+isCtorPayload (ValueSlice _) = True
+isCtorPayload ValueUnit = True
+isCtorPayload _ = False
 
 
 renderProgram :: Int -> Int -> [Stmt] -> String

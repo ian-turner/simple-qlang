@@ -1,0 +1,12 @@
+module countdown where
+
+
+countdown_zero : Int -> Bool
+countdown_zero n =
+  if (n == 0) then
+    True
+  else
+    countdown_zero (n-1)
+
+
+output = countdown_zero 3

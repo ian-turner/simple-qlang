@@ -70,6 +70,7 @@ executable funq
         TopMonad
         LambdaIR
         Lower
+        BoundedRecursion
         CPSExp
         ToCPS
         RecElim

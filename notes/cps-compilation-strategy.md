@@ -213,6 +213,15 @@ The GHZ example needs more than simple integer-counted loops. `init_n`,
 GHZ support requires both bounded shape inference and bounded recursion
 lowering.
 
+First landed subset:
+
+- top-level self-recursive unary declarations can now pass when they match the
+  pattern `if n == 0 then base else self (n - 1)`
+- expansion currently requires the counter to be a compile-time constant and is
+  implemented as safe bounded unrolling in the emitter
+- this is intentionally a first cut and does not yet address list recursion or
+  dynamic loop bounds
+
 ### 6. Static list erasure **[required for bounded list recursion, planned]**
 After bounded list recursion is lowered, statically sized `List` values should
 be rewritten into fixed records or tuples before the later backend-facing
