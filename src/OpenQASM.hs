@@ -50,6 +50,7 @@ data Stmt
   | StmtMeasure String Int
   | StmtAssign String String
   | StmtDeclareAssign String String String
+  | StmtIfElse String [Stmt] [Stmt]
   | StmtSwitch String [(Int, [Stmt])]
 
 
@@ -309,6 +310,14 @@ runExp moduleEnv env (CSwitch val arms) haltK = do
         [] ->
           lift $
             Left "OpenQASM emission failed: switch expression has no arms."
+        [falseArm, trueArm] ->
+          pure $
+            EmitResult
+              { resultStmts =
+                  resultStmts valueResult
+                    ++ [StmtIfElse (name ++ " == 1") (resultStmts trueArm) (resultStmts falseArm)]
+              , resultValue = resultValue trueArm
+              }
         (firstArm : _) ->
           pure $
             EmitResult
@@ -1106,6 +1115,12 @@ renderStmt indentLevel (StmtAssign name valueExpr) =
   [indent indentLevel ++ name ++ " = " ++ valueExpr ++ ";"]
 renderStmt indentLevel (StmtDeclareAssign declType name valueExpr) =
   [indent indentLevel ++ declType ++ " " ++ name ++ " = " ++ valueExpr ++ ";"]
+renderStmt indentLevel (StmtIfElse condition trueStmts falseStmts) =
+  [indent indentLevel ++ "if (" ++ condition ++ ") {"]
+    ++ concatMap (renderStmt (indentLevel + 1)) trueStmts
+    ++ [indent indentLevel ++ "} else {"]
+    ++ concatMap (renderStmt (indentLevel + 1)) falseStmts
+    ++ [indent indentLevel ++ "}"]
 renderStmt indentLevel (StmtSwitch scrutinee arms) =
   [indent indentLevel ++ "switch (" ++ scrutinee ++ ") {"]
     ++ concatMap renderArm arms

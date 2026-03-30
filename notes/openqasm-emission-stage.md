@@ -55,6 +55,7 @@ The landed emitter currently handles:
 - CPS continuations and direct top-level calls
 - flattened tuple/data-flow records
 - simple classical `switch`
+- two-arm dynamic classical branches rendered as OpenQASM `if/else`
 - primitive function values such as `xgate` and `zgate` passed through
   top-level higher-order code
 - symbolic float constants such as `pi`, preserved from parsing through
