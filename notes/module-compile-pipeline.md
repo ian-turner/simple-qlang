@@ -33,14 +33,15 @@ record flattening:
 - entry-point metadata can live alongside the compiled declarations
 - a signature-rewriting pass can be inserted without entangling it with debug
   output
+- module-level record-shape analysis now runs against that representation
 
 ## Current Limitation
 
-This refactor does not yet change semantics or enable interprocedural record
-flattening by itself.
+This refactor still does not perform interprocedural record flattening by
+itself.
 
-The next pass still needs to:
+What still remains after the follow-on shape-analysis pass is:
 
-- infer record shapes across `CFix` definitions and top-level boundaries
 - rewrite function parameters and `CApp` sites together
+- rewrite affected function bodies so record `SELECT`s collapse to scalar names
 - distinguish tuple/data-flow records from closure/defunctionalization records

@@ -8,6 +8,7 @@ import Resolve
 import TopMonad
 import CompilePipeline
 import QubitHoist (HoistedProgram(..))
+import RecordShape (renderModuleRecordShapes)
 
 
 parserIO :: Either ParseError a -> IO a
@@ -29,8 +30,12 @@ main = do
         Left err    -> error $ show err
         Right decls' -> do
           -- Lambda IR lowering
+          let compiledModule = compileModule decls'
           putStrLn "=== Lambda IR ==="
-          mapM_ printCompiledItem (compiledItems (compileModule decls'))
+          mapM_ printCompiledItem (compiledItems compiledModule)
+          putStrLn $ ""
+          putStrLn "=== Module Record Shapes ==="
+          mapM_ putStrLn (renderModuleRecordShapes (compiledRecordShapes compiledModule))
   where
     resolution [] = return []
     resolution (d:ds) = do

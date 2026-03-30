@@ -15,11 +15,13 @@ import ClosureConv (closureConvert)
 import Defunc (defunctionalize)
 import QubitHoist (HoistedProgram(..), hoistQubits)
 import RecordFlatten (flattenRecords)
+import RecordShape (ModuleRecordShapes, analyzeModuleRecordShapes)
 
 
 data CompiledModule = CompiledModule
   { compiledItems       :: [CompiledItem]
   , compiledEntryPoints :: [String]
+  , compiledRecordShapes :: ModuleRecordShapes
   }
 
 
@@ -47,6 +49,7 @@ compileModule decls =
   in CompiledModule
        { compiledItems = items
        , compiledEntryPoints = findEntryPoints items
+       , compiledRecordShapes = analyzeModuleRecordShapes (shapeInputs items)
        }
 
 
@@ -90,4 +93,11 @@ findEntryPoints items =
   [ compiledName decl
   | Compiled decl <- items
   , compiledName decl == "output"
+  ]
+
+
+shapeInputs :: [CompiledItem] -> [(String, Either String CExp)]
+shapeInputs items =
+  [ (compiledName decl, compiledRecursionResult decl)
+  | Compiled decl <- items
   ]

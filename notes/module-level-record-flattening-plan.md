@@ -19,9 +19,19 @@ each top-level declaration independently:
 That structure prevents a later pass from rewriting function signatures and
 call sites consistently across a whole module.
 
-## Structural Changes Required
+## Structural Progress
 
-### 1. Add a module-level CPS pipeline representation
+The first two structural prerequisites from this note are now implemented:
+
+- module-level compilation now lives in `src/CompilePipeline.hs`
+- whole-module record-shape analysis now lives in `src/RecordShape.hs`
+
+That means the remaining work is no longer architectural setup. The next step
+is the actual signature-aware flattening rewrite.
+
+## Remaining Structural Changes
+
+### 1. Module-level CPS pipeline representation
 
 Instead of treating each top-level declaration as an isolated `CExp`, add a
 representation for a compiled module after CPS conversion and middle-end
@@ -34,13 +44,12 @@ Minimum useful shape:
   defunctionalization / qubit hoisting
 - enough metadata to identify entry declarations such as `output`
 
-Possible direction:
+Status:
 
-- introduce a `CompiledDecl` / `CompiledModule` datatype
-- move the post-lowering pipeline from `printLowered` in `src/Main.hs` into a
-  module-oriented compilation function
+- implemented as `CompiledDecl` / `CompiledModule` in `src/CompilePipeline.hs`
+- `src/Main.hs` now formats compiled artifacts instead of driving the pipeline
 
-### 2. Run record-shape analysis across the whole module
+### 2. Whole-module record-shape analysis
 
 The compiler needs a pass that tracks which variables and function parameters
 have scalar shape vs record shape.
@@ -58,6 +67,12 @@ The output should be a stable notion of function-interface shape, for example:
 - parameter 0 of function `f` is scalar
 - parameter 1 of function `f` is a 2-field record of scalars
 - function `k` is always called with a 3-field record in argument slot 1
+
+Status:
+
+- implemented conservatively in `src/RecordShape.hs`
+- currently stored on `CompiledModule`
+- currently printed as a top-level debug summary in `src/Main.hs`
 
 ### 3. Rewrite function signatures and call sites together
 
@@ -77,6 +92,8 @@ This is the real missing piece for:
 - tuple results from `PCNot`
 - records passed through continuations
 - cross-declaration calls such as `bell00` consumed by `output`
+
+This is now the immediate implementation target.
 
 ### 4. Separate tuple flattening from closure-record handling
 
@@ -108,22 +125,36 @@ conservative classification heuristic.
 
 That makes it hard to introduce module-level analyses.
 
-Refactor target:
+Status:
 
-- one pure compile pipeline that returns all intermediate artifacts needed
-- one display/debug layer that prints those artifacts
-
-That will make later passes easier to insert and easier to test.
+- implemented by the `CompilePipeline` refactor
+- later passes can now be inserted without changing `Main`'s compilation logic
 
 ## Suggested Near-Term Refactor Sequence
 
-1. Extract per-declaration compilation from `src/Main.hs` into a pure helper.
-2. Introduce a module-level datatype holding all compiled declarations.
-3. Run existing middle-end passes into that datatype without changing behavior.
-4. Add whole-module record-shape analysis.
-5. Replace the current conservative `RecordFlatten` pass with a signature-aware
-   flattening pass, or keep the local pass as a pre-pass and add a second
-   interprocedural pass after it.
+1. Use `ModuleRecordShapes` to identify record-valued parameters that are safe
+   to flatten.
+2. Rewrite affected `CFix` parameter lists and matching `CApp` argument lists.
+3. Rewrite function bodies so projections from flattened parameters become
+   direct scalar variables.
+4. Keep the existing local `RecordFlatten` pass as a pre-pass unless the new
+   rewrite fully subsumes it.
+5. Leave closure/defunctionalization records conservative until the backend
+   path needs a more explicit classification.
+
+## Immediate Handoff
+
+The next thread should start with the signature-aware rewrite, not more
+analysis.
+
+Concretely:
+
+- consume `compiledRecordShapes` from `CompiledModule`
+- flatten record-valued function interfaces in the pre-closure CPS
+- update all corresponding `CApp` sites in the same pass
+- preserve parameters whose inferred shape is `ShapeOpaque`
+- treat tuple/data-flow records as flattenable first; leave closure-like
+  records conservative
 
 ## Expected Payoff
 

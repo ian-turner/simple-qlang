@@ -78,6 +78,7 @@ executable funq
         QubitHoist
         RecordFlatten
         CompilePipeline
+        RecordShape
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
