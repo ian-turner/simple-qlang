@@ -82,5 +82,5 @@ emitting VAX/MIPS/SPARC assembly, we emit OpenQASM gate sequences or QIR LLVM IR
 | Chapter | Status | Notes file |
 |---|---|---|
 | 1 | Read | [ch01-overview.md](ch01-overview.md) |
-| 2 | Partial (§2.1) | [ch02-cps-datatype.md](ch02-cps-datatype.md) |
+| 2 | Read | [ch02-cps-datatype.md](ch02-cps-datatype.md) |
 | 3–18 | Not started | — |
