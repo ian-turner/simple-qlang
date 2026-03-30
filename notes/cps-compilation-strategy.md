@@ -232,34 +232,49 @@ In Appel's `cexp` datatype (§2.1, pp. 11–12):
 
 ```
 FIX([(bell00, [x, c],
-       PRIMOP(init,  [],              [a],
-       PRIMOP(init,  [],              [b],
-       PRIMOP(hgate, [VAR a],         [a'],
-       PRIMOP(cnot,  [VAR a', VAR b], [q1, q2],
-       APP(VAR c, [RECORD([VAR q1, VAR q2])])
-       )))))],
+       PRIMOP(init,  [],              [a],   [
+       PRIMOP(init,  [],              [b],   [
+       PRIMOP(hgate, [VAR a],         [a'],  [
+       PRIMOP(cnot,  [VAR a', VAR b], [q1, q2], [
+       RECORD([(VAR q1, OFFp 0), (VAR q2, OFFp 0)], r,
+         APP(VAR c, [VAR r]))
+       ])])])])],
 E)
 ```
+
+Note: `RECORD` is a `cexp` (it allocates, binds a result variable, and
+continues) — it is not a value and cannot appear inline inside `APP`. The
+qubit pair is first heap-allocated into record `r`, then `r` is passed to the
+continuation `c`.
 
 ### CPS Conversion of `output` — Measurement Branches
 
 ```
-APP(VAR bell00, [UNIT, FUN (a, b) ->
+APP(VAR bell00, [UNIT, FUN (r) ->
+  SELECT(0, VAR r, a,
+  SELECT(1, VAR r, b,
   PRIMOP(meas, [VAR a], [],
     [ (* outcome |0> *)
       PRIMOP(meas, [VAR b], [],
-        [ APP(VAR k, [RECORD([FALSE, FALSE])]),   (* b = |0> *)
-          APP(VAR k, [RECORD([FALSE, TRUE])]) ]), (* b = |1> *)
+        [ RECORD([(INT 0, OFFp 0), (INT 0, OFFp 0)], res, APP(VAR k, [VAR res])),  (* b=|0> *)
+          RECORD([(INT 0, OFFp 0), (INT 1, OFFp 0)], res, APP(VAR k, [VAR res])) ](* b=|1> *)
+      ),
       (* outcome |1> *)
       PRIMOP(meas, [VAR b], [],
-        [ APP(VAR k, [RECORD([TRUE, FALSE])]),    (* b = |0> *)
-          APP(VAR k, [RECORD([TRUE, TRUE])]) ])   (* b = |1> *)
-    ])])
+        [ RECORD([(INT 1, OFFp 0), (INT 0, OFFp 0)], res, APP(VAR k, [VAR res])),  (* b=|0> *)
+          RECORD([(INT 1, OFFp 0), (INT 1, OFFp 0)], res, APP(VAR k, [VAR res])) ](* b=|1> *)
+      )
+    ])))
 ```
+
+Note: `bell00`'s continuation receives a record `r` holding the qubit pair;
+`SELECT` projects each qubit out before measuring. Boolean outcomes are
+represented as `INT 0`/`INT 1` (or `VBool` in the FunQ datatype) and bundled
+into a fresh record before being passed to the outer continuation `k`.
 
 ### After Qubit Hoisting + Tuple Flattening
 
-After hoisting, the two `PRIMOP(init)` calls become resets of global qubits. After tuple flattening, `RECORD([q1, q2])` and `SELECT` are replaced by direct variable references.
+After hoisting, the two `PRIMOP(init)` calls become resets of global qubits. After tuple flattening, the `RECORD`/`SELECT` pairs used for qubit tuples are replaced by direct variable references.
 
 ```openqasm
 // Hoisted qubit declarations
@@ -289,9 +304,12 @@ result[1] = c1;
 
 ---
 
-## Next Steps / Chapters to Read
+## Chapters to Read
 
-- **Chapter 2** (§2.1–2.5): Full CPS datatype, closure conversion sketch, spilling
+- **Chapter 3**: Formal semantics of CPS — needed for reasoning about linearity preservation
 - **Chapter 5**: The CPS conversion algorithm
 - **Chapter 6**: Optimizations — β-contraction (§6.1) and eta reduction (§6.2)
 - **Chapter 10**: Closure conversion algorithm in detail
+- **Chapter 11**: Register spilling in detail
+
+Chapters 1 and 2 are fully read; see `notes/appel/` for detailed notes.
