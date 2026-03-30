@@ -15,13 +15,13 @@ See also `../cps-compilation-strategy.md` for the high-level strategy document.
 |---|---|---|
 | 1 ✓ | Parse + type-check FunQ (linear types) | FunQ-specific, not in Appel |
 | 2 ✓ | Lower to λ-calculus-like form; desugar patterns/data | Ch 4 (§4.1–4.2, §4.5–4.8) |
-| 3 | Convert to CPS | Ch 5 |
+| 3 ✓ | Convert to CPS | Ch 5 |
 | 4a | β-contraction, constant folding | Ch 6 (§6.1–6.2) |
 | 4b | Eta reduction, cascading optimizations | Ch 6 (§6.2–6.3) |
 | 4c | Beta expansion (inlining) | Ch 7 |
 | 4d | Hoisting | Ch 8 |
 | 4e | Common subexpression elimination | Ch 9 |
-| 5 | Closure conversion (eliminate free variables) | Ch 10 |
+| 5 ✓ | Closure conversion (eliminate free variables) | Ch 10 |
 | 6 | Register spilling (bound free-variable count) | Ch 11 |
 | 7 | Emit OpenQASM / QIR | Replaces Chs 13–14 (abstract machine + codegen) |
 
@@ -85,4 +85,5 @@ emitting VAX/MIPS/SPARC assembly, we emit OpenQASM gate sequences or QIR LLVM IR
 | 2 | Read | [ch02-cps-datatype.md](ch02-cps-datatype.md) |
 | 4 | Read | [ch04-lambda-language.md](ch04-lambda-language.md) |
 | 5 | Read | [ch05-cps-conversion.md](ch05-cps-conversion.md) |
-| 3, 6–18 | Not started | — |
+| 10 | Read | [ch10-closure-conversion.md](ch10-closure-conversion.md) |
+| 3, 6–9, 11–18 | Not started | — |

@@ -1,6 +1,6 @@
 # Chapter 1 — Overview
 
-Pages 1–10. Status: **read**.
+Pages 1–10. Status: **complete**.
 
 ---
 

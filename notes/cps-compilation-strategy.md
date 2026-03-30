@@ -116,12 +116,12 @@ Implemented in `src/LambdaIR.hs` (the `LExp` datatype) and `src/Lower.hs`
 - Primitives (`hgate`, `+`, etc.) → `LPrim op []` as first-class values;
   curried applications eagerly collected into `LPrim op [args]`
 
-### 3. Convert to CPS **[required]** (Chapter 5)
+### 3. Convert to CPS **[required, done]** (Chapter 5)
 - Every function gains an extra continuation argument `c`
 - Returning a value `v` becomes `APP(c, [v])`
 - Measurement becomes `PRIMOP(measure, ...)` with two continuations
 
-### 4. Closure conversion **[required]** (Chapter 10)
+### 4. Closure conversion **[required, done]** (Chapter 10)
 Eliminate all free variables. Every `FIX`-bound function becomes a closed
 value; its free variables are bundled into an explicit closure record passed
 as an extra argument. After this pass the program is one flat top-level `FIX`
@@ -346,10 +346,10 @@ result[1] = c1;
 
 ## Chapters to Read
 
-- **Chapter 3**: Formal semantics of CPS — needed for reasoning about linearity preservation
-- **Chapter 5**: The CPS conversion algorithm
-- **Chapter 6**: Optimizations — β-contraction (§6.1) and eta reduction (§6.2)
-- **Chapter 10**: Closure conversion algorithm in detail
-- **Chapter 11**: Register spilling in detail
+- **Chapter 11**: Register spilling — next required stage
 
-Chapters 1 and 2 are fully read; see `notes/appel/` for detailed notes.
+Deferred (after required pipeline is complete):
+- **Chapter 3**: Formal semantics of CPS — needed for reasoning about linearity preservation
+- **Chapter 6**: Optimizations — β-contraction (§6.1) and eta reduction (§6.2)
+
+Chapters 1, 2, 4, 5, 10 are fully read; see `notes/appel/` for detailed notes.
