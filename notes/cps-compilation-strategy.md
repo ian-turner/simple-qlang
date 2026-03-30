@@ -182,7 +182,7 @@ value; its free variables are bundled into an explicit closure record passed
 as an extra argument. After this pass the program is one flat top-level `FIX`
 with no nested scopes — a prerequisite for all subsequent passes.
 
-### 6. Defunctionalization **[required]**
+### 6. Defunctionalization **[required, done]**
 **OpenQASM has no function values.** After closure conversion, closures are
 still first-class data. Defunctionalization (Reynolds-style) converts all
 remaining higher-order functions into tagged data + a top-level dispatch
@@ -194,6 +194,12 @@ cctrl g = \a phi -> if a then g phi else phi
 ```
 After defunctionalization, `g` becomes a tag (an integer or constructor) and
 the dispatch function performs the appropriate gate call based on the tag.
+
+Current status: implemented as a first correctness-oriented pass in
+`src/Defunc.hs`. The pass replaces synthetic closure-conversion code labels
+with integer tags in closure records and rewrites indirect closure calls into
+`SWITCH`-based dispatch over direct `VLabel` calls. Dispatch sets are currently
+per-declaration rather than minimized per call site.
 
 ### 7. Qubit hoisting **[required]**
 **OpenQASM requires all qubit declarations at top-level scope.**

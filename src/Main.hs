@@ -13,6 +13,7 @@ import Lower (lowerDecl, runLower)
 import ToCPS (toCPSDecl)
 import RecElim (elimRecursion)
 import ClosureConv (closureConvert)
+import Defunc (defunctionalize)
 
 
 parserIO :: Either ParseError a -> IO a
@@ -63,4 +64,8 @@ main = do
               putStrLn "  ok (no recursion)"
               putStrLn $ ""
               putStrLn "=== Closure-Converted IR ==="
-              putStrLn $ "  " ++ name ++ " = " ++ show (closureConvert cpsExp')
+              let ccExp = closureConvert cpsExp'
+              putStrLn $ "  " ++ name ++ " = " ++ show ccExp
+              putStrLn $ ""
+              putStrLn "=== Defunctionalized IR ==="
+              putStrLn $ "  " ++ name ++ " = " ++ show (defunctionalize ccExp)

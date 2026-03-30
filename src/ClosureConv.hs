@@ -39,7 +39,12 @@ import CPSExp
 -- ---------------------------------------------------------------------------
 
 type TopDef = (Variable, [Variable], CExp)
-type CC     = State [TopDef]
+data CCState = CCState
+  { ccTopDefs   :: [TopDef]
+  , ccNextLabel :: Int
+  }
+
+type CC = State CCState
 
 
 -- ---------------------------------------------------------------------------
@@ -83,7 +88,9 @@ fvVal _        = Set.empty
 --   single top-level CFix containing all lifted function definitions.
 closureConvert :: CExp -> CExp
 closureConvert expr =
-  let (body', topDefs) = runState (ccExp expr) []
+  let initState = CCState [] 0
+      (body', st) = runState (ccExp expr) initState
+      topDefs = ccTopDefs st
   in case topDefs of
        []   -> body'
        defs -> CFix defs body'
@@ -147,6 +154,7 @@ ccExp (CFix defs body) = do
 
   -- Fresh code-label variables (one per function in this FIX group).
   freshNames (replicate n "lbl") $ \codeVars -> do
+    codeLabels <- freshCodeLabels n
 
     -- Lift each function to top level.
     mapM_ (liftFunc n names sharedFvs m codeVars) (zip3 [0..] codeVars defs)
@@ -155,8 +163,8 @@ ccExp (CFix defs body) = do
     body' <- ccExp body
     freshNames ["rec"] $ \[recVar] -> do
       let recordFields =
-              [ (VLabel (show cv), OFFp 0) | cv <- codeVars ]
-           ++ [ (VVar fvj,        OFFp 0) | fvj <- sharedFvs ]
+              [ (VLabel lbl, OFFp 0) | lbl <- codeLabels ]
+           ++ [ (VVar fvj,   OFFp 0) | fvj <- sharedFvs ]
           -- Bind each function name to its OFFSET into the shared record.
           bindFunctions =
               foldr (\(i, fname) acc -> COffset i (VVar recVar) fname acc)
@@ -178,7 +186,7 @@ liftFunc n names sharedFvs _m _codeVars (i, codeVar, (_fname, params, b)) =
   freshNames ["clo"] $ \[cloI] -> do
     b' <- ccExp b
     let newBody = buildPreamble i n cloI names sharedFvs b'
-    modify ((codeVar, cloI : params, newBody) :)
+    modify $ \st -> st { ccTopDefs = (codeVar, cloI : params, newBody) : ccTopDefs st }
 
 
 -- | Wrap a function body with SELECT/OFFSET bindings that make all free
@@ -207,3 +215,12 @@ buildPreamble i n cloI names sharedFvs body =
               bindFvs
               (zip [0..] names)
   in bindSiblings
+
+
+freshCodeLabels :: Int -> CC [String]
+freshCodeLabels n = do
+  st <- get
+  let start = ccNextLabel st
+      labels = [ "_fun" ++ show i | i <- [start .. start + n - 1] ]
+  put st { ccNextLabel = start + n }
+  return labels
