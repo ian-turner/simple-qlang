@@ -25,6 +25,17 @@ cnot_layer a xs =
 ghz_n : Int -> List Qubit
 ghz_n n =
   let a = hgate (init ())
-      qs = init_n n
+      qs = init_n (n-1)
       (a', qs') = (cnot_layer a qs)
   in (Cons a' qs')
+
+
+meas_all : List Qubit -> List Bool
+meas_all xs =
+  case xs of
+    Nil -> Nil
+    Cons x xs' -> (Cons (meas x) (meas_all xs'))
+
+
+ghz_4 = ghz_n 4
+output = meas_all ghz_4

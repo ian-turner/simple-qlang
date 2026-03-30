@@ -10,6 +10,7 @@ import CompilePipeline
 import QubitHoist (HoistedProgram(..))
 import RecordShape (renderModuleRecordShapes)
 import GateDef (renderCallableKind, renderModuleCallableKinds)
+import OpenQASM (emitOpenQASM)
 
 
 parserIO :: Either ParseError a -> IO a
@@ -40,6 +41,13 @@ main = do
           putStrLn $ ""
           putStrLn "=== Module Gate/Def Classification ==="
           mapM_ putStrLn (renderModuleCallableKinds (compiledCallableKinds compiledModule))
+          putStrLn $ ""
+          putStrLn "=== OpenQASM ==="
+          case emitOpenQASM compiledModule of
+            Left err ->
+              putStrLn $ "  error: " ++ err
+            Right qasm ->
+              putStrLn qasm
   where
     resolution [] = return []
     resolution (d:ds) = do

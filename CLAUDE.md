@@ -11,10 +11,10 @@ cabal build                              # build the compiler
 cabal run funq -- examples/bell00.funq  # run on a source file
 ```
 
-The compiler runs the full pipeline through interface flattening, gate/`def`
-classification, qubit hoisting, and local record flattening, and prints each
-IR stage to stdout. There is no test suite yet; verify changes by running the
-examples manually.
+The compiler now runs through a first OpenQASM emission path in addition to the
+existing IR stages. It prints the intermediate forms plus generated OpenQASM to
+stdout. There is no test suite yet; verify changes by running the examples
+manually.
 
 ---
 
@@ -36,6 +36,7 @@ examples manually.
 | `RecordShape.hs` | Whole-module tuple/data-flow record-shape analysis |
 | `ModuleRecordFlatten.hs` | Interprocedural interface flattening before closure conversion |
 | `GateDef.hs` | Conservative top-level gate/`def` classification |
+| `OpenQASM.hs` | First entrypoint-driven OpenQASM emitter |
 | `ClosureConv.hs` | Closure conversion: eliminates free variables (Appel Ch 10) |
 | `Defunc.hs` | Defunctionalization: replaces runtime code pointers with tags and dispatch |
 | `QubitHoist.hs` | Hoists `init` to static qubit slots after defunctionalization |
@@ -71,7 +72,7 @@ introducing any optional optimizations or the linear type checker.
 7. Qubit hoisting — *done*
 8. Tuple/record flattening — *done* for tuple/data-flow records
 9. Gate/def classification — *done* as a conservative top-level pass
-10. Emit OpenQASM
+10. Emit OpenQASM — *first cut done* via entrypoint-driven emission
 
 ### Deferred until after the required pipeline works
 - Linear type checking (assumes well-typed, linear input for now)

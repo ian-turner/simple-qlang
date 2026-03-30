@@ -14,8 +14,9 @@ Shared instructions for coding agents working in this repository.
 
 - Implemented: parse, scope resolution, lowering to Lambda IR, CPS conversion,
   recursion checking, closure conversion, defunctionalization, qubit hoisting,
-  tuple/data-flow record flattening, gate/def classification
-- Not yet implemented: OpenQASM emission
+  tuple/data-flow record flattening, gate/def classification, first OpenQASM
+  emission
+- Not yet implemented: reusable `gate` / `def` emission and backend cleanup
 - There is no automated test suite yet; validate changes by building and
   running the example programs
 
