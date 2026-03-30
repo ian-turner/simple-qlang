@@ -11,8 +11,9 @@ cabal build                              # build the compiler
 cabal run funq -- examples/bell00.funq  # run on a source file
 ```
 
-The compiler runs the full pipeline through qubit hoisting and prints each IR
-stage to stdout.  There is no test suite yet — verify changes by running the
+The compiler runs the full pipeline through interface flattening, gate/`def`
+classification, qubit hoisting, and local record flattening, and prints each
+IR stage to stdout. There is no test suite yet; verify changes by running the
 examples manually.
 
 ---
@@ -32,9 +33,13 @@ examples manually.
 | `CPSExp.hs` | CPS IR datatype (`CExp`, `Value`, `AccessPath`) |
 | `ToCPS.hs` | CPS conversion: `LExp` → `CExp` (Appel Ch 5) |
 | `RecElim.hs` | Recursion check: errors on recursive `CFix` groups |
+| `RecordShape.hs` | Whole-module tuple/data-flow record-shape analysis |
+| `ModuleRecordFlatten.hs` | Interprocedural interface flattening before closure conversion |
+| `GateDef.hs` | Conservative top-level gate/`def` classification |
 | `ClosureConv.hs` | Closure conversion: eliminates free variables (Appel Ch 10) |
 | `Defunc.hs` | Defunctionalization: replaces runtime code pointers with tags and dispatch |
 | `QubitHoist.hs` | Hoists `init` to static qubit slots after defunctionalization |
+| `RecordFlatten.hs` | Local record simplification after qubit hoisting |
 | `Main.hs` | Orchestrates the full pipeline; prints each IR stage |
 
 ## Key dependencies
@@ -65,7 +70,7 @@ introducing any optional optimizations or the linear type checker.
 6. Defunctionalization — *done*
 7. Qubit hoisting — *done*
 8. Tuple/record flattening — *done* for tuple/data-flow records
-9. Gate/def classification
+9. Gate/def classification — *done* as a conservative top-level pass
 10. Emit OpenQASM
 
 ### Deferred until after the required pipeline works

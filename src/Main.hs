@@ -9,6 +9,7 @@ import TopMonad
 import CompilePipeline
 import QubitHoist (HoistedProgram(..))
 import RecordShape (renderModuleRecordShapes)
+import GateDef (renderCallableKind, renderModuleCallableKinds)
 
 
 parserIO :: Either ParseError a -> IO a
@@ -36,6 +37,9 @@ main = do
           putStrLn $ ""
           putStrLn "=== Module Record Shapes ==="
           mapM_ putStrLn (renderModuleRecordShapes (compiledRecordShapes compiledModule))
+          putStrLn $ ""
+          putStrLn "=== Module Gate/Def Classification ==="
+          mapM_ putStrLn (renderModuleCallableKinds (compiledCallableKinds compiledModule))
   where
     resolution [] = return []
     resolution (d:ds) = do
@@ -66,6 +70,11 @@ main = do
           maybe (return ()) (\interfaceExp ->
             putStrLn $ "  " ++ compiledName compiledDecl ++ " = " ++ show interfaceExp)
             (compiledInterfaceIR compiledDecl)
+          putStrLn $ ""
+          putStrLn "=== Gate/Def Classification ==="
+          maybe (return ()) (\kind ->
+            putStrLn $ "  " ++ compiledName compiledDecl ++ " : " ++ renderCallableKind kind)
+            (compiledCallableKind compiledDecl)
           putStrLn $ ""
           putStrLn "=== Closure-Converted IR ==="
           maybe (return ()) (\ccExp ->

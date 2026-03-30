@@ -40,41 +40,40 @@ In practice it already handles:
 This is useful preparation for backend work because it reduces administrative
 record noise before emission exists.
 
-## What Still Blocks Completion
+## What The Current Record Flattening Now Covers
 
-The remaining gap is full interprocedural flattening, especially across
-top-level continuation boundaries.
+The continuation-result follow-on work is now landed as well.
 
-Record-valued data-flow can still survive when it crosses:
+Tuple/data-flow results can now flatten across top-level continuation
+boundaries when shape inference can connect the producer and consumer
+interfaces. That closes the original required record-flattening milestone for
+ordinary tuple/data-flow traffic.
 
-- continuation parameters supplied from another declaration
-- top-level function result paths encoded through CPS continuations
-- any interface whose inferred shape remains `ShapeUnknown` or `ShapeOpaque`
+The remaining conservative boundary is intentional:
 
-The next implementation step is no longer "add interface flattening". It is to
-extend shape propagation so continuation-parameter signatures connect across
-declaration boundaries and let tuple-returning functions flatten all the way
-into their consumers.
+- interfaces inferred as `ShapeUnknown` or `ShapeOpaque` are left alone
+- closure-conversion records are not aggressively flattened here
+- defunctionalization records are also preserved for later backend-facing
+  lowering if needed
 
 ## Practical Status Of The Remaining OpenQASM Work
 
 The compiler is beyond "qubit hoisting only", but it is not yet at the point
 where a clean OpenQASM emitter can be added directly.
 
-The remaining required milestones are:
+The remaining required milestone is:
 
-1. finish interprocedural tuple/data-flow record flattening
-2. classify closed functions as `gate` or `def`
-3. emit OpenQASM from the flattened, closed CPS
+1. emit OpenQASM from the flattened, closed CPS
+
+Gate/`def` classification is now implemented as a conservative top-level pass
+over the interface-flattened CPS in `src/GateDef.hs`. That gives the compiler a
+stable classification summary without making later closure/dispatch scaffolding
+drive every function to `def`.
 
 ## Documentation Drift To Keep In Mind
 
-At the time of writing, some top-level docs still describe the compiler state
-as:
+The main drift to watch for now is older handoff text that still says
+continuation-result flattening or gate/`def` classification is the next step.
 
-- implemented through qubit hoisting only
-- tuple/record flattening not started
-
-Those statements are now stale. Treat the notes covering module compilation,
-record-shape analysis, and record flattening as the more accurate source of
-truth until the top-level summaries are refreshed.
+Those statements are stale. The current next required backend step is OpenQASM
+emission.

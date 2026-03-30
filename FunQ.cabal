@@ -76,6 +76,7 @@ executable funq
         ClosureConv
         Defunc
         QubitHoist
+        GateDef
         ModuleRecordFlatten
         RecordFlatten
         CompilePipeline

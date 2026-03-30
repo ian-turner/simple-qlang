@@ -34,9 +34,12 @@ Status update:
   `src/ModuleRecordFlatten.hs`
 - `src/CompilePipeline.hs` now runs that pass before closure conversion
 - `src/Main.hs` now prints an `Interface-Flattened IR` stage
+- continuation-result flattening across top-level declaration boundaries is now
+  also landed
+- gate/`def` classification now runs after interface flattening
 
-The remaining step is to extend that rewrite across top-level continuation
-boundaries, not to introduce the rewrite from scratch.
+That means this note is now mostly historical: the structural and analysis
+prerequisites it called for are in place.
 
 ## Remaining Structural Changes
 
@@ -107,7 +110,8 @@ Status:
 - partially implemented in `src/ModuleRecordFlatten.hs`
 - verified to rewrite some local continuation interfaces and `PCNot`
   tuple handoffs
-- not yet complete for cross-declaration continuation-result flow
+- later completed for cross-declaration continuation-result flow; see
+  `notes/continuation-result-record-flattening.md`
 
 ### 4. Separate tuple flattening from closure-record handling
 
@@ -144,33 +148,21 @@ Status:
 - implemented by the `CompilePipeline` refactor
 - later passes can now be inserted without changing `Main`'s compilation logic
 
-## Suggested Near-Term Refactor Sequence
+## Historical Follow-On
 
-1. Use `ModuleRecordShapes` to identify record-valued parameters that are safe
-   to flatten.
-2. Rewrite affected `CFix` parameter lists and matching `CApp` argument lists.
-3. Rewrite function bodies so projections from flattened parameters become
-   direct scalar variables.
-4. Keep the existing local `RecordFlatten` pass as a pre-pass unless the new
-   rewrite fully subsumes it.
-5. Leave closure/defunctionalization records conservative until the backend
-   path needs a more explicit classification.
+The near-term refactor sequence and handoff work described here have now been
+completed:
 
-## Immediate Handoff
+1. `ModuleRecordShapes` identifies flattenable tuple/data-flow interfaces.
+2. `ModuleRecordFlatten` rewrites matching `CFix` and `CApp` interfaces.
+3. Flattened parameter projections collapse to direct scalar variables.
+4. The local `RecordFlatten` pass remains as a later cleanup pass.
+5. Closure/defunctionalization records stay conservative.
 
-The next thread should start from the landed interface rewrite and extend the
-shape analysis for cross-declaration continuation-result flow.
+For the current next-stage handoff, see:
 
-Concretely:
-
-- keep using `compiledRecordShapes` from `CompiledModule`
-- extend shape propagation so continuation parameters supplied from another
-  declaration can acquire record shape when they carry tuple/data-flow results
-- keep `src/ModuleRecordFlatten.hs` as the place that rewrites `CFix`
-  signatures and matching `CApp` sites
-- preserve parameters whose inferred shape is `ShapeOpaque`
-- keep tuple/data-flow records flattenable first; leave closure-like records
-  conservative
+- `notes/gate-def-classification-stage.md`
+- `notes/current-pipeline-status.md`
 
 ## Expected Payoff
 
@@ -182,7 +174,7 @@ required record-flattening milestone:
 - OpenQASM emission can operate on scalar qubit/bit/int flows rather than CPS
   heap-record conventions
 
-This is the structural prerequisite for the next two required stages:
+This structural work is now the prerequisite that remains in place for the
+final required backend stage:
 
-- gate/`def` classification
 - OpenQASM emission

@@ -221,12 +221,19 @@ sites after defunctionalization, substitutes the bound result variable with
 rewritten CPS expression. Actual `qubit q_i;` declarations and `reset`
 insertion remain part of the future OpenQASM emission stage.
 
-### 8. Tuple/record flattening **[required]**
+### 8. Tuple/record flattening **[required, done for tuple/data-flow records]**
 **OpenQASM has no tuple type.** The CPS IR uses `RECORD`/`SELECT` for tuples
 (e.g., qubit pairs from `cnot`). This pass replaces each tuple with individual
 scalar variables and rewrites all `SELECT` projections as direct variable references.
 
-### 9. Gate/def classification **[required]**
+Current status: implemented in two layers. `src/ModuleRecordFlatten.hs`
+performs shape-driven interface flattening before closure conversion, including
+continuation-result flow across top-level declaration boundaries when the
+record shape is known. `src/RecordFlatten.hs` then performs local record
+cleanup after qubit hoisting. Closure-conversion and defunctionalization
+records remain conservative by design.
+
+### 9. Gate/def classification **[required, first cut done]**
 Classify each closed `FIX`-bound function as `gate` or `def` before emission:
 
 - **`gate`**: body contains only gate applications — no measurement, no classical
@@ -239,6 +246,11 @@ Classify each closed `FIX`-bound function as `gate` or `def` before emission:
   ```openqasm
   def xmeasure(qubit q) -> bit { H q; return measure q; }
   ```
+
+Current status: implemented conservatively in `src/GateDef.hs` as a top-level
+module analysis over the interface-flattened CPS. The current classifier
+provides stable `gate`/`def` summaries for top-level declarations without
+letting closure-conversion or dispatch scaffolding dominate the result.
 
 ### 10. Emit OpenQASM **[required]**
 Structural translation from the flat, closed, recursion-free CPS:

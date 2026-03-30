@@ -42,10 +42,16 @@ The current analysis tracks four cases:
 
 ## Current Limitation
 
-This pass only infers function-interface shapes. It does not yet rewrite:
+This pass is no longer just a standalone analysis stage. Its inferred shapes
+are now consumed by `src/ModuleRecordFlatten.hs` to rewrite:
 
 - function parameter lists
-- `CApp` argument lists
-- record projections inside function bodies
+- matching `CApp` argument lists
+- record projections from flattened parameters
 
-That rewrite is still the next step.
+The current limitation is narrower and backend-facing:
+
+- interfaces whose shape remains `ShapeUnknown` or `ShapeOpaque` are preserved
+- closure-conversion and defunctionalization records remain conservative
+- the analysis is not itself an emission pass; OpenQASM lowering is still the
+  remaining required stage

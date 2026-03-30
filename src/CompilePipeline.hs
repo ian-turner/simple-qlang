@@ -12,6 +12,7 @@ import Lower (lowerDecl, runLower)
 import ToCPS (toCPSDecl)
 import RecElim (elimRecursion)
 import ModuleRecordFlatten (flattenModuleRecordInterfaces)
+import GateDef (CallableKind, ModuleCallableKinds, analyzeModuleCallableKinds, lookupTopLevelCallableKind)
 import ClosureConv (closureConvert)
 import Defunc (defunctionalize)
 import QubitHoist (HoistedProgram(..), hoistQubits)
@@ -23,6 +24,7 @@ data CompiledModule = CompiledModule
   { compiledItems       :: [CompiledItem]
   , compiledEntryPoints :: [String]
   , compiledRecordShapes :: ModuleRecordShapes
+  , compiledCallableKinds :: ModuleCallableKinds
   }
 
 
@@ -38,6 +40,7 @@ data CompiledDecl = CompiledDecl
   , compiledCPSIR           :: CExp
   , compiledRecursionResult :: Either String CExp
   , compiledInterfaceIR     :: Maybe CExp
+  , compiledCallableKind    :: Maybe CallableKind
   , compiledClosureIR       :: Maybe CExp
   , compiledDefuncIR        :: Maybe CExp
   , compiledHoistedIR       :: Maybe HoistedProgram
@@ -49,11 +52,14 @@ compileModule :: [Decl] -> CompiledModule
 compileModule decls =
   let initialItems = map compileDecl decls
       shapes = analyzeModuleRecordShapes (shapeInputs initialItems)
-      items = map (finalizeDecl shapes) initialItems
+      interfacedItems = map (prepareDecl shapes) initialItems
+      callableKinds = analyzeModuleCallableKinds (classificationInputs interfacedItems)
+      items = map (finalizeDecl callableKinds) interfacedItems
   in CompiledModule
        { compiledItems = items
        , compiledEntryPoints = findEntryPoints items
        , compiledRecordShapes = shapes
+       , compiledCallableKinds = callableKinds
        }
 
 
@@ -72,6 +78,7 @@ compileDecl decl =
                , compiledCPSIR = cpsExp
                , compiledRecursionResult = Left err
                , compiledInterfaceIR = Nothing
+               , compiledCallableKind = Nothing
                , compiledClosureIR = Nothing
                , compiledDefuncIR = Nothing
                , compiledHoistedIR = Nothing
@@ -84,6 +91,7 @@ compileDecl decl =
                   , compiledCPSIR = cpsExp
                   , compiledRecursionResult = Right cpsExp'
                   , compiledInterfaceIR = Nothing
+                  , compiledCallableKind = Nothing
                   , compiledClosureIR = Nothing
                   , compiledDefuncIR = Nothing
                   , compiledHoistedIR = Nothing
@@ -91,20 +99,33 @@ compileDecl decl =
                   }
 
 
-finalizeDecl :: ModuleRecordShapes -> CompiledItem -> CompiledItem
-finalizeDecl _ SkippedDecl = SkippedDecl
-finalizeDecl _ (LoweringError err) = LoweringError err
-finalizeDecl shapes (Compiled compiledDecl) =
+prepareDecl :: ModuleRecordShapes -> CompiledItem -> CompiledItem
+prepareDecl _ SkippedDecl = SkippedDecl
+prepareDecl _ (LoweringError err) = LoweringError err
+prepareDecl shapes (Compiled compiledDecl) =
   case compiledRecursionResult compiledDecl of
     Left _ ->
       Compiled compiledDecl
     Right cpsExp ->
       let interfaceExp = flattenModuleRecordInterfaces shapes (compiledName compiledDecl) cpsExp
-          ccExp = closureConvert interfaceExp
+      in Compiled compiledDecl
+           { compiledInterfaceIR = Just interfaceExp
+           }
+
+
+finalizeDecl :: ModuleCallableKinds -> CompiledItem -> CompiledItem
+finalizeDecl _ SkippedDecl = SkippedDecl
+finalizeDecl _ (LoweringError err) = LoweringError err
+finalizeDecl callableKinds (Compiled compiledDecl) =
+  case compiledInterfaceIR compiledDecl of
+    Nothing ->
+      Compiled compiledDecl
+    Just interfaceExp ->
+      let ccExp = closureConvert interfaceExp
           defuncExp = defunctionalize ccExp
           hoisted = hoistQubits defuncExp
       in Compiled compiledDecl
-           { compiledInterfaceIR = Just interfaceExp
+           { compiledCallableKind = lookupTopLevelCallableKind callableKinds (compiledName compiledDecl)
            , compiledClosureIR = Just ccExp
            , compiledDefuncIR = Just defuncExp
            , compiledHoistedIR = Just hoisted
@@ -124,4 +145,12 @@ shapeInputs :: [CompiledItem] -> [(String, Either String CExp)]
 shapeInputs items =
   [ (compiledName decl, compiledRecursionResult decl)
   | Compiled decl <- items
+  ]
+
+
+classificationInputs :: [CompiledItem] -> [(String, CExp)]
+classificationInputs items =
+  [ (compiledName decl, interfaceExp)
+  | Compiled decl <- items
+  , Just interfaceExp <- [compiledInterfaceIR decl]
   ]
