@@ -56,24 +56,44 @@ The remaining conservative boundary is intentional:
 - defunctionalization records are also preserved for later backend-facing
   lowering if needed
 
-## Practical Status Of The Remaining OpenQASM Work
+## Practical Status Of The Backend
 
-The compiler is beyond "qubit hoisting only", but it is not yet at the point
-where a clean OpenQASM emitter can be added directly.
+The compiler now has a first end-to-end OpenQASM backend path in
+`src/OpenQASM.hs`.
 
-The remaining required milestone is:
+That emitter currently:
 
-1. emit OpenQASM from the flattened, closed CPS
+- starts from `output`
+- emits from the interface-flattened CPS
+- performs global qubit allocation during emission
+- inlines reachable top-level calls into one flat OpenQASM program
+- refuses to run if earlier compilation stages rejected recursive top-level
+  label cycles
 
-Gate/`def` classification is now implemented as a conservative top-level pass
-over the interface-flattened CPS in `src/GateDef.hs`. That gives the compiler a
-stable classification summary without making later closure/dispatch scaffolding
-drive every function to `def`.
+Gate/`def` classification remains implemented as a conservative top-level pass
+over the interface-flattened CPS in `src/GateDef.hs`.
+
+Top-level recursion checking is now split across two places:
+
+- `src/RecElim.hs` rejects recursive local `CFix` groups
+- `src/CompilePipeline.hs` rejects recursive cycles between top-level
+  declarations via `VLabel` call-graph analysis
+
+## What Still Remains
+
+The remaining work is now backend refinement rather than absence of a backend:
+
+1. emit reusable OpenQASM `gate` / `def` declarations instead of only
+   entrypoint-driven inlining
+2. decide the long-term backend boundary relative to closure conversion /
+   defunctionalization
+3. broaden emitter coverage and reduce duplicated code in generated output
 
 ## Documentation Drift To Keep In Mind
 
 The main drift to watch for now is older handoff text that still says
-continuation-result flattening or gate/`def` classification is the next step.
+continuation-result flattening, gate/`def` classification, or first OpenQASM
+emission is the next step.
 
-Those statements are stale. The current next required backend step is OpenQASM
-emission.
+Those statements are stale. The current next backend step is emitter
+refinement.

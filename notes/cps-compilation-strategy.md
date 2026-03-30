@@ -174,7 +174,9 @@ intersection is a compile-time error.
 
 Current status: detection and error reporting are complete.  Unrolling of
 bounded recursion (the `for`-loop path) is deferred until after the full
-pipeline is validated end-to-end.
+pipeline is validated end-to-end. `src/CompilePipeline.hs` also performs a
+module-level top-level recursion check over `VLabel` calls between compiled
+declarations so recursive label cycles are rejected before OpenQASM emission.
 
 ### 5. Closure conversion **[required, done]** (Chapter 10)
 Eliminate all free variables. Every `FIX`-bound function becomes a closed
@@ -252,7 +254,7 @@ module analysis over the interface-flattened CPS. The current classifier
 provides stable `gate`/`def` summaries for top-level declarations without
 letting closure-conversion or dispatch scaffolding dominate the result.
 
-### 10. Emit OpenQASM **[required]**
+### 10. Emit OpenQASM **[required, first cut done]**
 Structural translation from the flat, closed, recursion-free CPS:
 
 | CPS | OpenQASM |
@@ -266,6 +268,15 @@ Structural translation from the flat, closed, recursion-free CPS:
 | Classical `PRIMOP(+, ...)` etc. | arithmetic expression |
 
 Type sizing: FunQ's `Int` → `int[32]`, `Float` → `float[64]`, `Bool` → `bool`.
+
+Current status: a first emitter now lives in `src/OpenQASM.hs`. The current
+backend is intentionally pragmatic: it emits from the interface-flattened CPS,
+starts from `output`, performs global qubit allocation during emission, and
+inlines reachable top-level calls into a single OpenQASM program. Reusable
+`gate` / `def` declaration emission is still future backend refinement work.
+If earlier compilation stages reported recursion errors, the emitter now stops
+immediately with that compile-stage failure summary instead of attempting
+backend inlining through missing declarations.
 
 ---
 
