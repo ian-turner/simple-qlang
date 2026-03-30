@@ -1,0 +1,64 @@
+module qft_n where
+
+
+data List a = Nil | Cons a (List a)
+
+
+-- Initialise n fresh |0> qubits.
+init_n : Int -> List Qubit
+init_n n =
+  if (n == 0) then Nil
+  else Cons (init ()) (init_n (n-1))
+
+
+-- Measure every qubit in a list.
+meas_all : List Qubit -> List Bool
+meas_all qs =
+  case qs of
+    Nil -> Nil
+    Cons q qs' -> Cons (meas q) (meas_all qs')
+
+
+-- Apply the controlled-phase ladder starting at rotation index k:
+--   CP(pi/2^k) with ctrl against qs[0]
+--   CP(pi/2^(k+1)) with ctrl against qs[1]
+--   ...
+-- Returns the (updated ctrl, updated list).
+apply_rotations : Int -> Qubit -> List Qubit -> (Qubit, List Qubit)
+apply_rotations k ctrl qs =
+  case qs of
+    Nil -> (ctrl, Nil)
+    Cons q qs' ->
+      let (ctrl', q')     = cpgate k ctrl q
+          (ctrl'', qs'')  = apply_rotations (k+1) ctrl' qs'
+      in (ctrl'', Cons q' qs'')
+
+
+-- Core QFT pass (output qubits are in bit-reversed order).
+-- For each qubit in the list:
+--   1. Apply H.
+--   2. Apply the controlled-phase ladder against all following qubits.
+--   3. Recurse on the remaining qubits.
+qft_core : List Qubit -> List Qubit
+qft_core qs =
+  case qs of
+    Nil -> Nil
+    Cons q qs' ->
+      let q'              = hgate q
+          (q'', qs'')     = apply_rotations 1 q' qs'
+          rest            = qft_core qs''
+      in Cons q'' rest
+
+
+-- n-qubit QFT: initialise n |0> qubits, apply the QFT, measure all outputs.
+-- The output bits are in bit-reversed order relative to the standard QFT
+-- definition; no qubit-swap pass has been applied.
+qft_n : Int -> List Bool
+qft_n n = meas_all (qft_core (init_n n))
+
+
+-- Test cases — change the argument to compile a different size.
+-- qft_n 3  →  3-qubit QFT  (3H + 3 CP gates + 3 measures)
+-- qft_n 4  →  4-qubit QFT  (4H + 6 CP gates + 4 measures)
+-- qft_n 5  →  5-qubit QFT  (5H + 10 CP gates + 5 measures)
+output = qft_n 4

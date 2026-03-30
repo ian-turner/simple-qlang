@@ -179,4 +179,5 @@ gateCompatiblePrim PSGate  = True
 gateCompatiblePrim PTGate  = True
 gateCompatiblePrim PCSGate = True
 gateCompatiblePrim PCTGate = True
+gateCompatiblePrim PCpGate = True
 gateCompatiblePrim _       = False

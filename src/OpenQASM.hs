@@ -627,6 +627,14 @@ runDirectPrimOp moduleEnv env PCTGate [arg0, arg1] [r0, r1] [cont] haltK
         Map.insert r1 (ValueQubit q1) (Map.insert r0 (ValueQubit q0) env)
   emitted <- runExp moduleEnv env' cont haltK
   pure emitted { resultStmts = StmtGate "cp(pi/4)" [q0, q1] : resultStmts emitted }
+runDirectPrimOp moduleEnv env PCpGate [ValueClassical (ClassicalConst k), arg0, arg1] [r0, r1] [cont] haltK
+  | Just q0 <- extractQubitArg arg0
+  , Just q1 <- extractQubitArg arg1 = do
+  let env' =
+        Map.insert r1 (ValueQubit q1) (Map.insert r0 (ValueQubit q0) env)
+      gateName = "cp(pi/" ++ show (2 ^ k :: Int) ++ ")"
+  emitted <- runExp moduleEnv env' cont haltK
+  pure emitted { resultStmts = StmtGate gateName [q0, q1] : resultStmts emitted }
 runDirectPrimOp moduleEnv env PMeas [arg] [result] [cont] haltK
   | Just q <- extractQubitArg arg = do
   bitName <- freshBitName
@@ -709,6 +717,12 @@ runPrimitiveExecution moduleEnv PCTGate [arg0, arg1] cont haltK
   , Just q1 <- extractQubitArg arg1 = do
   emitted <- applyCallable moduleEnv cont [ValueQubit q0, ValueQubit q1] haltK
   pure emitted { resultStmts = StmtGate "cp(pi/4)" [q0, q1] : resultStmts emitted }
+runPrimitiveExecution moduleEnv PCpGate [ValueClassical (ClassicalConst k), arg0, arg1] cont haltK
+  | Just q0 <- extractQubitArg arg0
+  , Just q1 <- extractQubitArg arg1 = do
+  emitted <- applyCallable moduleEnv cont [ValueQubit q0, ValueQubit q1] haltK
+  let gateName = "cp(pi/" ++ show (2 ^ k :: Int) ++ ")"
+  pure emitted { resultStmts = StmtGate gateName [q0, q1] : resultStmts emitted }
 runPrimitiveExecution moduleEnv PMeas [arg] cont haltK
   | Just q <- extractQubitArg arg = do
   bitName <- freshBitName
@@ -734,6 +748,7 @@ primArity PSGate  = 1
 primArity PTGate  = 1
 primArity PCSGate = 2
 primArity PCTGate = 2
+primArity PCpGate = 3
 primArity PAdd = 2
 primArity PSub = 2
 primArity PMul = 2

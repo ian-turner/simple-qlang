@@ -111,7 +111,7 @@ toCPSPrim PMeas args c =
 -- record so that the continuation c receives a single Value (the record
 -- address).  The RECORD/SELECT pair is eliminated by beta-contraction later.
 toCPSPrim op args c
-  | op `elem` [PCNot, PCSGate, PCTGate] =
+  | op `elem` [PCNot, PCSGate, PCTGate, PCpGate] =
   toCPSList args $ \vs ->
     freshNames ["q1", "q2", "r"] $ \[q1', q2', r] ->
       CPrimOp op vs [q1', q2']

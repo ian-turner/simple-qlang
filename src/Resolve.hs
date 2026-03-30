@@ -33,6 +33,7 @@ emptyScope = Scope {
                           , ("tgate",  A.Base "tgate")
                           , ("csgate", A.Base "csgate")
                           , ("ctgate", A.Base "ctgate")
+                          , ("cpgate", A.Base "cpgate")
                           , ("meas",   A.Base "meas")
                           ]
   }

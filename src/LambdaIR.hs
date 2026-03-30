@@ -16,6 +16,7 @@ data PrimOp
   | PTGate    -- tgate  : Qubit -> Qubit
   | PCSGate   -- csgate : Qubit -> Qubit -> (Qubit, Qubit)
   | PCTGate   -- ctgate : Qubit -> Qubit -> (Qubit, Qubit)
+  | PCpGate   -- cpgate : Int -> Qubit -> Qubit -> (Qubit, Qubit)
   -- Classical arithmetic
   | PAdd | PSub | PMul | PDiv
   -- Classical comparison

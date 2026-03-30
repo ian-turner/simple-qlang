@@ -36,6 +36,7 @@ baseToPrimOp "sgate"  = Just PSGate
 baseToPrimOp "tgate"  = Just PTGate
 baseToPrimOp "csgate" = Just PCSGate
 baseToPrimOp "ctgate" = Just PCTGate
+baseToPrimOp "cpgate" = Just PCpGate
 baseToPrimOp "+"      = Just PAdd
 baseToPrimOp "-"     = Just PSub
 baseToPrimOp "*"     = Just PMul
