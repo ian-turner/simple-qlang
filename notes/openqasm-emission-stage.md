@@ -57,9 +57,7 @@ Validated with:
 - `cabal build`
 - `cabal run funq -- examples/bell00.funq`
 - `cabal run funq -- examples/tele.funq`
-- bounded execution of `examples/ghz.funq`, which now fails fast with
-  compile-time top-level recursion errors instead of recursing through the
-  emitter
+- `cabal run funq -- examples/ghz.funq` (produces correct 4-qubit GHZ circuit)
 
 ## Deliberate Limitations
 
@@ -71,9 +69,9 @@ This is not yet the final backend architecture.
 - It assumes the root `output` continuation is the backend result boundary and
   intercepts that directly rather than relying on the final tiny local halt
   wrapper.
-- It still does not implement bounded recursion unrolling or OpenQASM `for`
-  lowering for logically terminating recursive helpers; those currently remain
-  compile-time errors.
+- It implements bounded recursion via budget-unrolling for the subset recognized
+  by `src/BoundedRecursion.hs`. General bounded recursion and OpenQASM `for`
+  lowering remain future work.
 
 The next backend improvement should be to factor the emitter so the current
 entrypoint-linearization logic can be reused while introducing explicit

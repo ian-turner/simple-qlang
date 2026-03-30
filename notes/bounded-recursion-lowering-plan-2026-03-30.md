@@ -301,15 +301,25 @@ program support becomes a middle-end feature rather than a backend side effect.
 
 ## Current GHZ-specific status
 
-As of this note update, `examples/ghz.funq` is no longer blocked primarily by
-the old recursion rejection path.
+As of 2026-03-30, `examples/ghz.funq` compiles and produces correct OpenQASM.
 
-The remaining failure is an emitter-side ADT consistency bug:
+The previous emitter-side ADT consistency bug (`select 0 from VVar a saw scalar
+1`) was traced to a type error in the source program, not a compiler limitation:
 
-- some recursive list path still collapses a `Cons`-shaped value to a bare tag
-- later code attempts to deconstruct it with `SELECT`
-- emission then fails because the payload is gone
+- `cnot_layer`'s Cons arm was returning a `List Qubit` value instead of the
+  declared `(Qubit, List Qubit)` pair
+- the recursive call was also threading `x'` (updated target) instead of `a'`
+  (updated control) as the carried qubit
 
-That confirms the larger lesson: the next durable improvement should be moving
-structural recursion and static-list handling earlier in the pipeline, not
-continuing to grow emitter-side reconstruction logic.
+Both were fixed directly in `examples/ghz.funq`. The backend's recursive
+evaluation via the 10,000-call budget counter handles `init_n`, `cnot_layer`,
+and `meas_all` correctly once the input is well-typed.
+
+The generated circuit is correct: `h q[0]`, then `cx q[0], q[1..3]`, then
+measure all four qubits.
+
+The larger lesson — that ADT semantics are split across CPS lowering,
+interface flattening, and emitter-side `ValueRep` reconstruction — still
+holds. The Phase 2–5 plan (shape inference → bounded recursion IR lowering →
+static list erasure → emitter simplification) remains the right long-term
+direction but is not blocking current examples.

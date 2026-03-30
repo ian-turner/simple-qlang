@@ -26,8 +26,13 @@ For current implementation status, prefer:
 
 ## Current Remaining Required Stage
 
-The remaining required backend milestone is OpenQASM emission.
+All required pipeline stages are now landed. The current working examples
+(`bell00`, `tele`, `ghz`) all compile to correct OpenQASM.
 
-Gate/`def` classification is landed, but it is currently a conservative
-top-level analysis over interface-flattened CPS rather than the final
-backend-facing classification for every closed helper.
+Remaining refinement work (none blocking):
+
+- reusable `gate` / `def` declaration emission (currently inlines from `output`)
+- explicit loop IR and static-list erasure for bounded recursion (currently
+  budget-unrolling in the emitter)
+- gate/`def` classification for all closed helpers, not just top-level
+  interface-flattened declarations

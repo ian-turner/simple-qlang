@@ -125,19 +125,15 @@ to add:
 - a bounded-recursion lowering pass that introduces explicit loop IR
 - a static-list erasure pass before the later backend-facing stages
 
-That work is required for examples such as `examples/ghz.funq`, whose recursive
-helpers are finite but are not yet lowered cleanly into loops and fixed
-aggregates.
+That work remains the right long-term direction, but it is no longer required to
+run `examples/ghz.funq`. GHZ now compiles successfully (as of 2026-03-30).
 
-The current GHZ blocker is now narrower than the original recursion rejection:
-
-- recursion can reach the backend
-- constructor-aware execution is partially implemented
-- one remaining emitter-side ADT consistency bug still collapses some `Cons`
-  values to bare tags before later deconstruction
-
-That is another signal that the durable fix is earlier bounded-recursion and
-static-list lowering, not more backend reconstruction logic.
+The previous GHZ blocker was a type error in the source program (`cnot_layer`
+returning a `List Qubit` instead of the declared `(Qubit, List Qubit)` pair and
+threading the wrong qubit through the recursive call). The fix was in
+`examples/ghz.funq`; the backend's budget-unrolling execution handles
+`init_n`, `cnot_layer`, and `meas_all` correctly once the input is
+well-typed.
 
 ## Documentation Drift To Keep In Mind
 

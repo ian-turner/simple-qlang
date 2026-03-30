@@ -90,27 +90,35 @@ tele phi =
 ## Project structure
 
 ```
-FunQ.cabal          — package definition and build configuration
+FunQ.cabal              — package definition and build configuration
 src/
-  Main.hs           — entry point: parse, resolve, lower, CPS-convert, print
-  Parser.hs         — Parsec parser (concrete syntax -> ConcreteSyntax)
-  ConcreteSyntax.hs — concrete syntax tree
-  Resolve.hs        — scope resolution (ConcreteSyntax -> Syntax)
-  Syntax.hs         — abstract syntax (uses nominal library for binding)
-  LambdaIR.hs       — Lambda IR datatype (LExp); analogous to Appel's lexp
-  Lower.hs          — lowering pass (Syntax -> LambdaIR)
-  CPSExp.hs         — CPS IR datatype (CExp, Value); Appel §2.1
-  ToCPS.hs          — CPS conversion pass (LambdaIR -> CPSExp); Appel Ch 5
-  ClosureConv.hs    — closure conversion pass (CPSExp -> CPSExp); Appel Ch 10
-  Defunc.hs         — defunctionalization pass (CPSExp -> CPSExp)
-  QubitHoist.hs     — static qubit-slot assignment after defunctionalization
-  TopMonad.hs       — top-level compilation monad
-  Utils.hs          — shared utilities
-examples/           — sample FunQ programs
-notes/              — compiler design notes
-  appel/            — chapter-by-chapter notes on Appel (1992)
+  Main.hs               — entry point: orchestrates full pipeline, emits OpenQASM
+  Parser.hs             — Parsec parser (concrete syntax -> ConcreteSyntax)
+  ConcreteSyntax.hs     — concrete syntax tree
+  Resolve.hs            — scope resolution (ConcreteSyntax -> Syntax)
+  Syntax.hs             — abstract syntax (uses nominal library for binding)
+  LambdaIR.hs           — Lambda IR datatype (LExp); analogous to Appel's lexp
+  Lower.hs              — lowering pass (Syntax -> LambdaIR)
+  CPSExp.hs             — CPS IR datatype (CExp, Value); Appel §2.1
+  ToCPS.hs              — CPS conversion pass (LambdaIR -> CPSExp); Appel Ch 5
+  RecElim.hs            — recursion check: rejects recursive local CFix groups
+  BoundedRecursion.hs   — recognizes bounded top-level self-recursive functions
+  RecordShape.hs        — whole-module record-shape inference
+  ModuleRecordFlatten.hs — interface record flattening before closure conversion
+  GateDef.hs            — conservative gate/def classification
+  ClosureConv.hs        — closure conversion pass (CPSExp -> CPSExp); Appel Ch 10
+  Defunc.hs             — defunctionalization pass (CPSExp -> CPSExp)
+  QubitHoist.hs         — static qubit-slot assignment after defunctionalization
+  RecordFlatten.hs      — local record cleanup after qubit hoisting
+  CompilePipeline.hs    — module-level compilation orchestration
+  OpenQASM.hs           — OpenQASM 3.0 emitter (entrypoint-driven)
+  TopMonad.hs           — top-level compilation monad
+  Utils.hs              — shared utilities
+examples/               — sample FunQ programs
+notes/                  — compiler design notes
+  appel/                — chapter-by-chapter notes on Appel (1992)
   cps-compilation-strategy.md — high-level CPS pipeline design
-resources/          — reference PDFs (git-ignored)
+resources/              — reference PDFs (git-ignored)
 ```
 
 ---
@@ -132,10 +140,8 @@ for f in examples/*.funq; do
 done
 ```
 
-The compiler currently parses, scope-resolves, lowers to Lambda IR, converts to
-CPS, performs closure conversion, defunctionalizes closure values, and hoists
-qubit allocation to static backend slots, printing each IR stage to stdout.
-Code generation is not yet implemented.
+The compiler runs a full pipeline from source to OpenQASM 3.0 and prints only
+the generated OpenQASM to stdout.
 
 ---
 
@@ -152,9 +158,10 @@ Code generation is not yet implemented.
 | Closure conversion (Appel Ch 10) | Done |
 | Defunctionalization | Done |
 | Qubit hoisting | Done |
-| Tuple/record flattening | Not started |
-| Gate/def classification | Not started |
+| Tuple/record flattening | Done (interface + local) |
+| Gate/def classification | Done (conservative first pass) |
+| Bounded recursion (unroll) | Done (first cut) |
 | Register spilling | Deferred |
-| OpenQASM emission | Not started |
+| OpenQASM emission | Done (first cut; inlines from `output`) |
 
 See `notes/appel/index.md` for the mapping of remaining stages to Appel chapters.
