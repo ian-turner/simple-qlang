@@ -1,0 +1,145 @@
+# FunQ
+
+FunQ is a functional quantum programming language with linear types. It compiles
+to OpenQASM / QIR, targeting near-term quantum hardware.
+
+The compiler is written in Haskell and follows the compilation pipeline described
+in Appel's *Compiling with Continuations* (1992), adapted for quantum semantics.
+See `notes/` for chapter-by-chapter notes on that adaptation.
+
+---
+
+## Language overview
+
+FunQ looks like a small ML-family language. It has:
+
+- **Linear types for qubits** — qubits cannot be copied or discarded implicitly,
+  enforcing the no-cloning theorem at compile time
+- **Quantum primitives** — `init`, `hgate`, `xgate`, `zgate`, `cnot`, `meas`
+  built into the language
+- **Higher-order functions** — functions are first-class; continuations and
+  classically-controlled gates are expressible directly
+- **Pattern matching** — tuples, ADTs, wildcards
+- **Algebraic data types** — `data` declarations with constructors
+- **Recursion** — general recursion supported; termination not checked
+
+### Built-in types
+
+| Type | Description |
+|---|---|
+| `Qubit` | Linear quantum bit — must be used exactly once |
+| `Bool` | Classical boolean |
+| `Int` | Classical integer |
+| `String` | String literal |
+| `Unit` | Unit value `()` |
+| `(a, b)` | Tuple |
+| `a -> b` | Function |
+
+### Built-in operations
+
+| Name | Type | Description |
+|---|---|---|
+| `init` | `Unit -> Qubit` | Allocate a fresh `\|0⟩` qubit |
+| `meas` | `Qubit -> Bool` | Measure and collapse a qubit |
+| `hgate` | `Qubit -> Qubit` | Hadamard gate |
+| `xgate` | `Qubit -> Qubit` | Pauli-X (NOT) gate |
+| `zgate` | `Qubit -> Qubit` | Pauli-Z gate |
+| `cnot` | `(Qubit, Qubit) -> (Qubit, Qubit)` | Controlled-NOT gate |
+
+### Example: Bell state
+
+```
+module bell00 where
+
+bell00 : Unit -> (Qubit, Qubit)
+bell00 x =
+  let
+    a = init ()
+    b = init ()
+  in (cnot (hgate a) b)
+
+output : (Bool, Bool)
+output =
+  let
+    (a, b) = bell00 ()
+  in (meas a, meas b)
+```
+
+### Example: Teleportation
+
+```
+module tele where
+
+cctrl : (Qubit -> Qubit) -> (Bool -> Qubit -> Qubit)
+cctrl g = (\ a phi -> (if a then (g phi) else phi))
+
+tele : Qubit -> Qubit
+tele phi =
+  let
+    (a, b) = bell00 ()
+    (phi, a) = cnot phi a
+    phi = hgate phi
+    a = cctrl xgate (meas b) a
+    phi' = cctrl zgate (meas a) phi
+  in phi'
+```
+
+---
+
+## Project structure
+
+```
+FunQ.cabal          — package definition and build configuration
+src/
+  Main.hs           — entry point: parse, resolve, print AST
+  Parser.hs         — Parsec parser (concrete syntax -> ConcreteSyntax)
+  ConcreteSyntax.hs — concrete syntax tree
+  Resolve.hs        — scope resolution (ConcreteSyntax -> Syntax)
+  Syntax.hs         — abstract syntax (uses nominal library for binding)
+  TopMonad.hs       — top-level compilation monad
+  Utils.hs          — shared utilities
+examples/           — sample FunQ programs
+notes/              — compiler design notes
+  appel/            — chapter-by-chapter notes on Appel (1992)
+  cps-compilation-strategy.md — high-level CPS pipeline design
+resources/          — reference PDFs (git-ignored)
+```
+
+---
+
+## Setup
+
+**Requirements**: GHC >= 9.10, cabal-install >= 3.12.
+
+```bash
+# Build
+cabal build
+
+# Run on a source file
+cabal run funq -- examples/bell00.funq
+
+# Run all examples
+for f in examples/*.funq; do
+  echo "=== $f ===" && cabal run funq -- "$f"
+done
+```
+
+The compiler currently parses and scope-resolves the input, then prints the
+resolved abstract syntax tree to stdout. Code generation is not yet implemented.
+
+---
+
+## Development status
+
+| Stage | Status |
+|---|---|
+| Parse + concrete syntax | Done |
+| Scope resolution | Done |
+| Type checking (linear types) | Not started |
+| CPS conversion | Not started |
+| CPS optimisation | Not started |
+| Closure conversion | Not started |
+| Register spilling | Not started |
+| OpenQASM / QIR emission | Not started |
+
+See `notes/appel/index.md` for the mapping of remaining stages to Appel chapters.
