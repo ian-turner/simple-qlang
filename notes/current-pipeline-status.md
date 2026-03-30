@@ -79,6 +79,32 @@ Top-level recursion checking is now split across two places:
 - `src/CompilePipeline.hs` rejects recursive cycles between top-level
   declarations via `VLabel` call-graph analysis
 
+A narrow first pass of bounded top-level recursion is now landed as well:
+
+- `src/BoundedRecursion.hs` recognizes top-level self-recursive unary
+  declarations guarded by `n == 0` and recursing on `n - 1`
+- `src/CompilePipeline.hs` allows that subset through the top-level recursion
+  check
+- `src/OpenQASM.hs` expands those calls only when the counter is a compile-time
+  constant and enforces a recursion budget during expansion
+
+This is still an unrolling-style implementation, not the planned explicit
+loop-IR design for general bounded recursion.
+
+Some additional backend work is now also landed around constructor-aware
+emission for recursive programs:
+
+- top-level function labels can now be evaluated with emitted statements rather
+  than being restricted to pure value lookup
+- the emitter has a first constructor-aware value model for tagged data during
+  recursive evaluation
+- output flattening and `switch` handling now understand constructor tags more
+  directly than the original tagged-record-only path
+
+That work improves recursion support, but it is still transitional. The backend
+is currently shouldering too much recursive-data interpretation that should
+eventually move into earlier middle-end passes.
+
 ## What Still Remains
 
 The remaining work is now backend refinement rather than absence of a backend:
@@ -100,8 +126,18 @@ to add:
 - a static-list erasure pass before the later backend-facing stages
 
 That work is required for examples such as `examples/ghz.funq`, whose recursive
-helpers are finite but currently rejected because the compiler does not yet
-lower fixed-size list recursion into loops and fixed aggregates.
+helpers are finite but are not yet lowered cleanly into loops and fixed
+aggregates.
+
+The current GHZ blocker is now narrower than the original recursion rejection:
+
+- recursion can reach the backend
+- constructor-aware execution is partially implemented
+- one remaining emitter-side ADT consistency bug still collapses some `Cons`
+  values to bare tags before later deconstruction
+
+That is another signal that the durable fix is earlier bounded-recursion and
+static-list lowering, not more backend reconstruction logic.
 
 ## Documentation Drift To Keep In Mind
 

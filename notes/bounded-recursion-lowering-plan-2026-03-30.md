@@ -198,3 +198,118 @@ The safest first milestone is not full GHZ support. It is:
 
 That gets the loop representation and backend path correct before taking on the
 harder static-list lowering work.
+
+## Robustness Plan Beyond The First Cut
+
+The first bounded-recursion slice is now landed, but the current backend is
+still recovering some recursive data structure semantics inside
+`src/OpenQASM.hs`. That is enough to get closer to examples like GHZ, but it is
+not the right long-term boundary for recursive programs in general.
+
+The robust direction is:
+
+1. finish the current GHZ blocker only as needed to keep momentum
+2. move bounded recursion handling out of the emitter and into explicit IR
+   lowering
+3. erase statically sized lists before the backend instead of reconstructing
+   `Nil` / `Cons` behavior from tagged records during emission
+
+That should make recursive programs much more stable and reduce backend-only
+special cases.
+
+### Why the current approach is fragile
+
+The current backend now has:
+
+- top-level recursion budgeting
+- constructor-aware switching on tagged values
+- partial constructor-aware output flattening
+- partial recovery of list payload shapes while executing recursive programs
+
+This is useful as a bridge, but it means recursive ADT semantics are currently
+split across:
+
+- CPS lowering conventions
+- interface flattening
+- emitter-side `ValueRep` reconstruction
+
+That split is exactly what makes examples like `ghz.funq` brittle: one path can
+still collapse a `Cons` value to a bare constructor tag and then later code
+tries to deconstruct it as if the payload were still present.
+
+### Recommended robust implementation sequence
+
+#### Phase 1. Finish the current GHZ blocker narrowly
+
+Purpose:
+
+- keep the repository in a usable state
+- confirm the remaining issue is only an emitter-side ADT representation bug
+
+This phase should stay small and should not become the long-term architecture.
+
+#### Phase 2. Add bounded shape/size inference
+
+Purpose:
+
+- infer fixed-size list lengths and bounded aggregate shape
+- provide a reliable proof that recursive list traversals are finite
+
+This should become the source of truth for:
+
+- `init_n n` has length `n`
+- `meas_all xs` preserves input length
+- `ghz_4` has concrete length `4`
+
+#### Phase 3. Add explicit bounded-recursion IR lowering
+
+Purpose:
+
+- lower supported recursive programs into explicit finite iteration
+- stop relying on recursive evaluation in the backend
+
+This is where counted recursion and structural list recursion should become:
+
+- counted loops
+- loop-carried state
+- indexed access into fixed aggregates
+
+#### Phase 4. Add static-list erasure
+
+Purpose:
+
+- erase `List` values with known finite size into fixed aggregates
+- remove `Nil` / `Cons` from the backend-facing IR
+
+After this phase, the backend should not need to reconstruct ADTs from tagged
+records. It should only see:
+
+- classical scalars
+- qubit values
+- fixed tuples / records
+- explicit loops and switches
+
+#### Phase 5. Simplify the emitter
+
+Purpose:
+
+- remove constructor/list recovery logic from `src/OpenQASM.hs`
+- keep the backend focused on OpenQASM rendering rather than semantic recovery
+
+At that point the backend becomes much easier to reason about, and recursive
+program support becomes a middle-end feature rather than a backend side effect.
+
+## Current GHZ-specific status
+
+As of this note update, `examples/ghz.funq` is no longer blocked primarily by
+the old recursion rejection path.
+
+The remaining failure is an emitter-side ADT consistency bug:
+
+- some recursive list path still collapses a `Cons`-shaped value to a bare tag
+- later code attempts to deconstruct it with `SELECT`
+- emission then fails because the payload is gone
+
+That confirms the larger lesson: the next durable improvement should be moving
+structural recursion and static-list handling earlier in the pipeline, not
+continuing to grow emitter-side reconstruction logic.
