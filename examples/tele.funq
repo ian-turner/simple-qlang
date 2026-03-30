@@ -23,8 +23,8 @@ tele phi =
     (a, b) = bell00 ()
     (phi, a) = cnot phi a
     phi = hgate phi
-    a = cctrl_x (meas b) a
-    phi' = cctrl_z (meas a) phi
+    b = cctrl_x (meas a) b
+    phi' = cctrl_z (meas phi) b
   in phi'
 
 -- Defines output variables
