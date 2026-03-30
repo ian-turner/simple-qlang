@@ -1,0 +1,29 @@
+module ghz where
+
+
+data List a = Nil | Cons a (List a)
+
+
+init_n : Int -> List Qubit
+init_n n =
+  if (n == 0) then
+    Nil
+  else
+    Cons (init ()) (init_n (n-1))
+
+
+cnot_layer : (Qubit, List Qubit) -> (Qubit, List Qubit)
+cnot_layer a xs =
+  case xs of
+    Nil -> (a, xs)
+    Cons x xs' ->
+      let (a', x') = cnot a x
+          (x'', xs'') = cnot_layer x' xs'
+      in Cons a' (Cons x'' xs'')
+
+
+ghz_n : Int -> List Qubit
+ghz_n n =
+  let a = hgate (init ())
+      qs = init_n n
+  in (cnot_layer a qs)
