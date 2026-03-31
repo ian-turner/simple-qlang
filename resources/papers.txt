@@ -1,0 +1,5 @@
+appel-continuations.pdf | Andrew Appel - Compiling with Continuations | https://www.ccs.neu.edu/home/shivers/cs6983/papers/Appel,%20Andrew%20~%20Compiling%20with%20Continuations.pdf
+kelsey-ssa-cps.pdf | Richard Kelsey - A Correspondence between Continuation Passing Style and Static Single Assignment Form | https://bernsteinbear.com/assets/img/kelsey-ssa-cps.pdf
+kennedy-compiling-with-continuations-continued.pdf | Andrew Kennedy - Compiling with Continuations, Continued | https://www.ccs.neu.edu/home/shivers/cs6983/papers/compilingwithcontinuationscontinued.pdf
+maurer-compiling-without-continuations.pdf | Luke Maurer et al. - Compiling without Continuations | https://simon.peytonjones.org/assets/pdfs/compiling-without-continuations.pdf
+cong-whatever.pdf | Youyou Cong et al. - Compiling with Continuations, or without? Whatever. | https://www.cs.purdue.edu/homes/rompf/papers/cong-icfp19.pdf
