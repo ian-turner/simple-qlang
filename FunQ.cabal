@@ -72,6 +72,7 @@ executable funq
         Lower
         BoundedRecursion
         CPSExp
+        CPSAtom
         ToCPS
         RecElim
         ClosureConv

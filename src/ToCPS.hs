@@ -159,7 +159,7 @@ conRepOf "False" = ConConstant 0
 conRepOf "True"  = ConConstant 1
 conRepOf "Nil"   = ConConstant 0
 conRepOf "Cons"  = ConTagged   1
-conRepOf _       = ConTagged   0   -- user-defined; assume tagged, tag=0
+conRepOf con     = error ("ToCPS.conRepOf: unknown constructor `" ++ con ++ "' — add it to the constructor table")
 
 
 -- | Integer tag for a ConAlt scrutinee arm.
@@ -168,7 +168,7 @@ conAltTag (CACon "False") = 0
 conAltTag (CACon "True")  = 1
 conAltTag (CACon "Nil")   = 0
 conAltTag (CACon "Cons")  = 1
-conAltTag (CACon _)       = 0
+conAltTag (CACon con)     = error ("ToCPS.conAltTag: unknown constructor `" ++ con ++ "' — add it to the constructor table")
 conAltTag CAUnit          = 0
 
 
