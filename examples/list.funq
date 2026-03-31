@@ -20,3 +20,6 @@ reverse xs =
     Cons x xs' ->
       let xs'' = reverse xs'
       in (concat xs'' (Cons x Nil))
+
+
+output = Cons 3 (Cons 4 Nil)
