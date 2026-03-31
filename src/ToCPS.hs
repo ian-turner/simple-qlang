@@ -84,10 +84,21 @@ toCPS (LDecon _name e)    c =
     freshNames ["d"] $ \[d] ->
       CSelect 0 v d (c (VVar d))
 
--- §5.7  Switch on constructor tag
+-- §5.7  Switch on constructor tag — named join continuation
+--   F(switch scrut arms, c) =
+--     FIX [(j, [x], c(x))]
+--       (F(scrut, λv. SWITCH v [F(armᵢ, λr. APP(j,[r]))]))
+--
+-- The continuation c is placed in j's body exactly once.  Each arm
+-- tail-calls j with its result instead of inlining c directly, so the
+-- post-switch code is not duplicated in the CPS tree.  The join
+-- continuation j is non-recursive by construction (c is a Haskell-level
+-- closure that cannot reference j), so RecElim passes it unchanged.
 toCPS (LSwitch scrut arms mbDef) c =
-  toCPS scrut $ \v ->
-    CSwitch v (buildSwitchArms arms mbDef c)
+  freshNames ["j", "x"] $ \[j, x] ->
+    CFix [(j, [x], c (VVar x))]
+      (toCPS scrut $ \v ->
+        CSwitch v (buildSwitchArms arms mbDef (\r -> CApp (VVar j) [r])))
 
 -- Primitive operations — dispatched by category
 toCPS (LPrim op args)     c = toCPSPrim op args c
