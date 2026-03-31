@@ -32,15 +32,18 @@ running the examples manually.
 | `CPSExp.hs` | CPS IR datatype (`CExp`, `Value`, `AccessPath`) |
 | `ToCPS.hs` | CPS conversion: `LExp` → `CExp` (Appel Ch 5) |
 | `RecElim.hs` | Recursion check: errors on recursive `CFix` groups |
+| `BoundedRecursion.hs` | Detects and extracts bounded top-level self-recursive declarations for unrolling |
 | `RecordShape.hs` | Whole-module tuple/data-flow record-shape analysis |
 | `ModuleRecordFlatten.hs` | Interprocedural interface flattening before closure conversion |
+| `CPSAtom.hs` | Shared atom/environment helpers used by both record-flattening passes |
 | `GateDef.hs` | Conservative top-level gate/`def` classification |
+| `CompilePipeline.hs` | Orchestrates per-declaration and whole-module compilation passes; produces `CompiledModule` |
 | `OpenQASM.hs` | First entrypoint-driven OpenQASM emitter |
 | `ClosureConv.hs` | Closure conversion: eliminates free variables (Appel Ch 10) |
 | `Defunc.hs` | Defunctionalization: replaces runtime code pointers with tags and dispatch |
 | `QubitHoist.hs` | Hoists `init` to static qubit slots after defunctionalization |
 | `RecordFlatten.hs` | Local record simplification after qubit hoisting |
-| `Main.hs` | Orchestrates the full pipeline and prints emitted OpenQASM |
+| `Main.hs` | Entry point: parses CLI args, calls `compileModule`, prints emitted OpenQASM |
 
 ## Key dependencies
 

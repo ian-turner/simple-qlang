@@ -1,5 +1,10 @@
 # Bounded Recursion Lowering Plan
 
+> **Status**: Future design proposal. This document describes a planned loop-IR
+> approach that is not yet implemented. For the current implementation (counter-
+> based unrolling in `src/BoundedRecursion.hs`), see
+> `notes/bounded-recursion-first-pass-2026-03-30.md`.
+
 This note captures the current design direction for supporting finite recursive
 programs in the OpenQASM pipeline without attempting general recursion.
 
