@@ -31,8 +31,8 @@ running the examples manually.
 | `Lower.hs` | Lowers resolved AST to `LExp` |
 | `CPSExp.hs` | CPS IR datatype (`CExp`, `Value`, `AccessPath`) |
 | `ToCPS.hs` | CPS conversion: `LExp` → `CExp` (Appel Ch 5) |
-| `RecElim.hs` | Recursion check: errors on recursive `CFix` groups |
-| `BoundedRecursion.hs` | Detects and extracts bounded top-level self-recursive declarations for unrolling |
+| `RecElim.hs` | Recursion check: errors on mutual recursion in multi-function CFix groups; single-function self-recursion is allowed through |
+| `BoundedRecursion.hs` | Legacy: detects bounded top-level self-recursive declarations (largely superseded by the while-loop path in OpenQASM.hs) |
 | `RecordShape.hs` | Whole-module tuple/data-flow record-shape analysis |
 | `ModuleRecordFlatten.hs` | Interprocedural interface flattening before closure conversion |
 | `CPSAtom.hs` | Shared atom/environment helpers used by both record-flattening passes |
@@ -68,15 +68,24 @@ introducing any optional optimizations or the linear type checker.
 1. Parse + scope resolve — *done*
 2. Lower to λ-calculus IR (Appel Ch 4) — *done*
 3. CPS conversion (Appel Ch 5) — *done*
-4. Recursion elimination — *done* for local recursion, with a first bounded
-   top-level self-recursive subset handled by `src/BoundedRecursion.hs`
+4. Recursion elimination — *done*. Local mutual recursion (multi-function CFix
+   groups) is rejected. Single-function self-recursion passes through and is
+   compiled to an OpenQASM `while` loop in the emitter (see stage 10).
 5. Closure conversion (Appel Ch 10) — *done*
 6. Defunctionalization — *done*
 7. Qubit hoisting — *done*
 8. Tuple/record flattening — *done* for tuple/data-flow records
 9. Gate/def classification — *done* as a conservative top-level pass
-10. Emit OpenQASM — *first cut done* via entrypoint-driven emission, including
-    homogeneous output arrays and boolean two-arm `if/else` rendering
+10. Emit OpenQASM — *done* via entrypoint-driven emission, including:
+    - Homogeneous output arrays and boolean two-arm `if/else` rendering
+    - Self-recursive functions compiled as OpenQASM 3.0 `while` loops.
+      `isTailLoop` (in `OpenQASM.hs`) decides the strategy: if every recursive
+      call passes the continuation through unchanged (directly or via η-trivial
+      chains, including Appel's curried-application intermediates), the function
+      is a tail loop and gets a `while` loop. Otherwise it falls back to guarded
+      inline expansion (depth limit: 1000) with a compile-time error if the
+      limit is reached. This handles both bounded loops and probabilistic
+      repeat-until-success circuits.
 
 ### Deferred until after the required pipeline works
 - Linear type checking (assumes well-typed, linear input for now)

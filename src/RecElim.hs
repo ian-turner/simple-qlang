@@ -13,12 +13,14 @@
 -- conversion they are buried in COffset → CSelect → CApp chains.
 --
 -- For non-recursive programs the expression is returned unchanged.
--- Unrolling of bounded recursion is deferred to a later iteration of this
--- pass once the full pipeline is validated end-to-end.
+-- Single-function self-recursive CFix groups are allowed through; the OpenQASM
+-- backend compiles them to while loops.  Mutual recursion across multiple
+-- functions in a single CFix group is still rejected.
 
 module RecElim (elimRecursion) where
 
 import qualified Data.Set as Set
+import Control.Monad (when)
 
 import Utils  (Variable)
 import CPSExp
@@ -47,11 +49,16 @@ checkExp (CSwitch _ arms)           = mapM_ checkExp arms
 checkExp (CPrimOp _ _ _ conts)      = mapM_ checkExp conts
 checkExp (CFix defs body) = do
   let names = Set.fromList [f | (f, _, _) <- defs]
-  mapM_ (checkDef names) defs
+  -- Single-function groups: self-recursion is allowed (compiled to a while loop
+  -- in the OpenQASM backend). Only check for mutual recursion in multi-function
+  -- groups.
+  when (Set.size names > 1) $
+    mapM_ (checkDef names) defs
   mapM_ (\(_, _, b) -> checkExp b) defs
   checkExp body
 
--- | Check one function in a CFix group for calls back into the group.
+-- | Check one function in a (multi-function) CFix group for calls back into
+-- the group. Self-recursion within single-function groups is handled elsewhere.
 checkDef :: Set.Set Variable -> (Variable, [Variable], CExp) -> Either String ()
 checkDef groupNames (fname, _, defBody) =
   let called    = calleesInExp defBody
@@ -59,10 +66,9 @@ checkDef groupNames (fname, _, defBody) =
   in if Set.null recursive
        then return ()
        else Left $
-              "RecElim: recursive function '" ++ show fname
-              ++ "' is not yet supported — unbounded recursion cannot be "
-              ++ "emitted as OpenQASM.  Supply a static bound or restructure "
-              ++ "the algorithm."
+              "RecElim: mutual recursion involving function '" ++ show fname
+              ++ "' is not yet supported — mutually recursive local definitions "
+              ++ "cannot be emitted as OpenQASM."
 
 
 -- ---------------------------------------------------------------------------

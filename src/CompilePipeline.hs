@@ -6,13 +6,11 @@ module CompilePipeline
   ) where
 
 import qualified Data.Graph as Graph
-import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 
 import Syntax (Decl)
 import LambdaIR (LExp)
 import CPSExp (CExp(..), Value(..))
-import BoundedRecursion (extractTopLevelFunction)
 import Lower (lowerDecl, runLower)
 import ToCPS (toCPSDecl)
 import RecElim (elimRecursion)
@@ -110,18 +108,13 @@ applyTopLevelRecursionCheck items =
   where
     groups = recursiveTopLevelGroups items
     unsupportedNames = Set.fromList (concatMap unsupportedGroupNames groups)
-    itemMap =
-      Map.fromList
-        [ (compiledName decl, expr)
-        | Compiled decl <- items
-        , Right expr <- [compiledRecursionResult decl]
-        ]
 
-    unsupportedGroupNames [name]
-      | Just expr <- Map.lookup name itemMap
-      , Just _ <- extractTopLevelFunction expr =
-          []
+    unsupportedGroupNames [_] =
+      -- Single self-recursive top-level function: allowed. The OpenQASM backend
+      -- compiles self-recursive CallableTopLevel functions as while loops.
+      []
     unsupportedGroupNames names =
+      -- Mutual top-level recursion is not yet supported.
       names
 
 

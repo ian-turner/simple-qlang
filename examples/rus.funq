@@ -1,0 +1,24 @@
+module rus where
+
+
+-- Repeat-until-success: loop until the ancilla measurement succeeds (= 1).
+-- A fresh ancilla is allocated each iteration and fully consumed by meas,
+-- so no qubit is aliased or reused across iterations.  The compiler's
+-- isTailLoop check sees that the recursive call rus_loop q' passes the
+-- outer continuation unchanged and emits an OpenQASM while loop; QubitHoist
+-- then assigns the ancilla to a static slot (q[1]), which is physically
+-- valid because a failed measurement (result 0) collapses it to |0>.
+rus_loop : Qubit -> Qubit
+rus_loop q =
+  let q'   = hgate q
+      anc  = init ()
+      anc' = hgate anc
+      m    = meas anc'
+  in if m then q' else rus_loop q'
+
+
+output : Bool
+output =
+  let q  = init ()
+      q' = rus_loop q
+  in meas q'

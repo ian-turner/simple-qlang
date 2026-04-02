@@ -54,8 +54,17 @@ data Stmt
   | StmtIf String [Stmt]
   | StmtIfElse String [Stmt] [Stmt]
   | StmtSwitch String [(Int, [Stmt])]
+  | StmtWhile String [Stmt]
   deriving (Eq, Show)
 
+
+-- | Mutable-variable context for a top-level function being compiled as a
+-- while loop.  Only classical parameters get mutable vars; qubit and callable
+-- parameters are invariant across iterations.
+data LoopContext = LoopContext
+  { loopClassicVars :: [(Variable, String)]
+    -- ^ Map from parameter 'Variable' to the name of its mutable temp variable.
+  }
 
 data EmitState = EmitState
   { emitNextQubit :: Int
@@ -64,7 +73,14 @@ data EmitState = EmitState
   , emitOutputLayout :: Maybe OutputLayout
   , emitTopLevelCache :: Map.Map String ValueRep
   , emitTopLevelInProgress :: Set.Set String
-  , emitRecursiveBudget :: Int
+  , emitLoopFunctions :: Map.Map String LoopContext
+    -- ^ Functions currently being compiled as while loops.  A recursive call
+    -- to any of these becomes a parameter-update block rather than a body
+    -- re-entry.
+  , emitInlineDepth :: Int
+    -- ^ Remaining inline-expansion budget for non-loop recursive functions.
+    -- Guards against unbounded inline expansion when a function is self-recursive
+    -- but is not a tail loop (e.g. list-building recursion like init_n).
   }
 
 data OutputLayout
@@ -91,7 +107,8 @@ emitOpenQASM compiledModule = do
           , emitOutputLayout = Nothing
           , emitTopLevelCache = Map.empty
           , emitTopLevelInProgress = Set.empty
-          , emitRecursiveBudget = 10000
+          , emitLoopFunctions = Map.empty
+          , emitInlineDepth = 1000
           }
   (stmts, finalState) <- runStateT (emitEntry moduleEnv outputExp) initState
   outputLayout <-
@@ -385,7 +402,8 @@ mergeBranchStates startState states =
           , emitOutputLayout = outputLayout
           , emitTopLevelCache = Map.union (emitTopLevelCache acc) (emitTopLevelCache st)
           , emitTopLevelInProgress = Set.union (emitTopLevelInProgress acc) (emitTopLevelInProgress st)
-          , emitRecursiveBudget = min (emitRecursiveBudget acc) (emitRecursiveBudget st)
+          , emitLoopFunctions = emitLoopFunctions acc
+          , emitInlineDepth = min (emitInlineDepth acc) (emitInlineDepth st)
           }
 
 
@@ -612,25 +630,232 @@ applyTopLevelCallable moduleEnv name topLevelFun args haltK
               ++ show (length args)
               ++ "."
           )
-  | otherwise =
-      do
-        ensureRecursiveBudget name
-        runExp moduleEnv (Map.fromList (zip (tlfParams topLevelFun) args)) (tlfBody topLevelFun) haltK
+  | otherwise = do
+      loopFunctions <- gets emitLoopFunctions
+      case Map.lookup name loopFunctions of
+        Just loopCtx ->
+          -- We are already compiling this function as a while loop: this is a
+          -- recursive self-call.  Emit update assignments for classical
+          -- parameters (qubit and callable parameters are iteration-invariant)
+          -- and return a dummy result — the real result comes from the exit arm.
+          let paramArgPairs = zip (tlfParams topLevelFun) args
+              classicUpdates =
+                [ StmtAssign varName (renderClassicalValue val)
+                | (param, val) <- paramArgPairs
+                , Just varName <- [lookup param (loopClassicVars loopCtx)]
+                , isClassicalValue val
+                ]
+          in pure EmitResult
+               { resultStmts = classicUpdates
+               , resultValue =
+                   error
+                     ( "OpenQASM emission: BUG — loop self-call resultValue was forced for `"
+                         ++ name
+                         ++ "`. The recursive branch's result should never be used as the definitive result of a while-loop body (the exit branch should be arm 1 in all 2-arm CSwitch expressions)."
+                     )
+               }
+        Nothing ->
+          if isTailLoop name (tlfParams topLevelFun) (tlfBody topLevelFun)
+            then compileAsLoop moduleEnv name topLevelFun args haltK
+            else do
+              depth <- gets emitInlineDepth
+              if depth <= 0
+                then
+                  lift $
+                    Left
+                      ( "OpenQASM emission failed: inline expansion depth exhausted for `"
+                          ++ name
+                          ++ "`. This function is recursive but cannot be compiled to a "
+                          ++ "while loop because its continuation changes at the recursive "
+                          ++ "call site.  If it is a repeat-until-success circuit, rewrite "
+                          ++ "it to pass the same qubit across iterations rather than "
+                          ++ "allocating a new one with `init ()` in the recursive call."
+                      )
+                else do
+                  modify (\st -> st { emitInlineDepth = depth - 1 })
+                  runExp moduleEnv (Map.fromList (zip (tlfParams topLevelFun) args)) (tlfBody topLevelFun) haltK
 
 
-ensureRecursiveBudget :: String -> EmitM ()
-ensureRecursiveBudget name = do
-  remaining <- gets emitRecursiveBudget
-  if remaining <= 0
-    then
-      lift $
-        Left
-          ( "OpenQASM emission failed: bounded recursion budget exhausted while expanding `"
-              ++ name
-              ++ "`. Refusing to continue unrolling."
-          )
-    else
-      modify (\st -> st { emitRecursiveBudget = remaining - 1 })
+-- | True when the function is a "tail loop": every recursive self-call's
+-- effective continuation is the outer continuation parameter, either passed
+-- directly (VVar contParam) or via a locally-bound η-trivial wrapper.
+--
+-- Appel's CPS transform for application always introduces an intermediate
+-- result continuation `r` bound by a local CFix with body
+--   (r, [x], CApp (VVar k) [VVar x])
+-- — i.e., a transparent pass-through to `k`.  Such wrappers are η-trivial
+-- and should be treated as equivalent to passing `k` directly.
+--
+-- Functions that modify the continuation at the call site (e.g. init_n, which
+-- builds a growing Cons chain through successive continuations) are NOT tail
+-- loops and must instead be compiled by inline expansion.
+isTailLoop :: String -> [Variable] -> CExp -> Bool
+isTailLoop name params body =
+  case params of
+    [] -> False
+    _ ->
+      let contParam = last params
+          calls = findSelfCallsInScope Map.empty name body
+      in not (null calls) && all (effectiveContinuationIs contParam) calls
+  where
+    -- Collect recursive call arg-lists, threading the set of locally-bound
+    -- CFix definitions seen on the way down (so we can resolve VVar wrappers).
+    findSelfCallsInScope localDefs n (CRecord _ _ b) =
+      findSelfCallsInScope localDefs n b
+    findSelfCallsInScope localDefs n (CSelect _ _ _ b) =
+      findSelfCallsInScope localDefs n b
+    findSelfCallsInScope localDefs n (COffset _ _ _ b) =
+      findSelfCallsInScope localDefs n b
+    findSelfCallsInScope localDefs n (CApp (VLabel l) args)
+      | l == n = [(localDefs, args)]
+    findSelfCallsInScope _ _ (CApp _ _) = []
+    findSelfCallsInScope localDefs n (CFix defs b) =
+      let localDefs' = Map.union (Map.fromList [(f, (ps, fb)) | (f, ps, fb) <- defs]) localDefs
+      in concatMap (\(_, _, db) -> findSelfCallsInScope localDefs' n db) defs
+           ++ findSelfCallsInScope localDefs' n b
+    findSelfCallsInScope localDefs n (CSwitch _ arms) =
+      concatMap (findSelfCallsInScope localDefs n) arms
+    findSelfCallsInScope localDefs n (CPrimOp _ _ _ conts) =
+      concatMap (findSelfCallsInScope localDefs n) conts
+
+    -- The effective continuation of a call is the outer contParam when the
+    -- last arg is either:
+    --   (a) VVar contParam directly, or
+    --   (b) VVar w where w is locally bound to an η-trivial wrapper of contParam
+    --       (possibly transitively through a chain of wrappers, as produced by
+    --       Appel's LApp and LSwitch transforms which both introduce intermediate
+    --       join/result continuations)
+    effectiveContinuationIs contParam (localDefs, args) =
+      case reverse args of
+        (VVar v : _) -> reachesContParam localDefs v
+        _            -> False
+      where
+        -- A variable "reaches the continuation" when:
+        --   (a) it IS contParam directly,
+        --   (b) it is not bound in localDefs — i.e. it is a free parameter
+        --       such as the continuation k of an inner curried function (k2 in
+        --       the two-level Appel curry encoding of f : A -> B -> C).  Such
+        --       parameters are always eventually bound to the actual exit
+        --       continuation by the time the function is fully applied.
+        --   (c) it is bound to an η-trivial wrapper: (r,[x], CApp (VVar k) [VVar x])
+        --   (d) it is bound to a curried-application continuation:
+        --       (r,[x], CApp (VVar x) [..args..]) where the last arg reaches.
+        reachesContParam _ v | v == contParam = True
+        reachesContParam defs v =
+          case Map.lookup v defs of
+            Nothing ->
+              -- Free variable: it's a parameter coming from outside this scope,
+              -- i.e. a continuation endpoint such as k2 in a curried function body.
+              -- NOTE: This is a known conservative over-approximation. If malformed
+              -- CPS somehow placed a non-continuation free variable at the end of
+              -- an η-chain, isTailLoop would incorrectly return True and compile a
+              -- non-tail-loop function as a while loop. This is safe in practice
+              -- because ToCPS only introduces free variables at continuation
+              -- positions, but it is not verified structurally.
+              True
+            Just (ps, CApp (VVar cont) appArgs)
+              | appArgs == map VVar ps ->
+                  reachesContParam defs cont
+            Just ([x], CApp (VVar appFun) appArgs)
+              | appFun == x
+              , not (null appArgs)
+              , VVar lastArg <- last appArgs ->
+                  reachesContParam defs lastArg
+            _ -> False
+
+
+-- | Compile a self-recursive top-level function as an OpenQASM while loop.
+--
+-- Classical parameters are given mutable temp variables declared before the
+-- loop.  Qubit and callable parameters are invariant across iterations and are
+-- bound directly.  A boolean "done" flag breaks out of the loop when the exit
+-- continuation is reached.
+compileAsLoop
+  :: ModuleEnv
+  -> String
+  -> TopLevelFunction
+  -> [ValueRep]
+  -> ([ValueRep] -> EmitM (EmitResult a))
+  -> EmitM (EmitResult a)
+compileAsLoop moduleEnv name topLevelFun args haltK = do
+  let paramArgPairs = zip (tlfParams topLevelFun) args
+
+  -- Allocate a mutable temp variable for each classical parameter.
+  classicVarTriples <-
+    mapM
+      ( \(param, val) -> do
+          varName <- freshTempName
+          pure (param, varName, val)
+      )
+      [ (param, val) | (param, val) <- paramArgPairs, isClassicalValue val ]
+
+  -- Allocate the loop-exit flag.
+  doneVar <- freshTempName
+
+  -- Statements emitted before the while loop.
+  let initStmts =
+        StmtDeclareAssign "bool" doneVar "false" :
+        [ StmtDeclareAssign
+            (renderClassicalType (classicalTypeOf val))
+            varName
+            (renderClassicalValue val)
+        | (_, varName, val) <- classicVarTriples
+        ]
+
+  -- Environment for the body: classical params use their mutable vars;
+  -- everything else (qubits, callables) is taken directly from the args.
+  let classicEnv =
+        Map.fromList
+          [ (param, ValueClassical (ClassicalVar (classicalTypeOf val) varName))
+          | (param, varName, val) <- classicVarTriples
+          ]
+      restEnv =
+        Map.fromList
+          [ (param, val)
+          | (param, val) <- paramArgPairs
+          , not (isClassicalValue val)
+          ]
+      bodyEnv = Map.union classicEnv restEnv
+
+  -- Register the loop context so that recursive self-calls are intercepted.
+  let loopCtx =
+        LoopContext
+          { loopClassicVars = [(param, varName) | (param, varName, _) <- classicVarTriples]
+          }
+  modify (\st -> st { emitLoopFunctions = Map.insert name loopCtx (emitLoopFunctions st) })
+
+  -- Run the body once.  The modified haltK prepends "done = true" so that the
+  -- exit arm sets the flag before passing control back to the outer context.
+  let loopHaltK vals = do
+        result <- haltK vals
+        pure result { resultStmts = StmtAssign doneVar "true" : resultStmts result }
+
+  bodyResult <- runExp moduleEnv bodyEnv (tlfBody topLevelFun) loopHaltK
+
+  -- Unregister the loop context.
+  modify (\st -> st { emitLoopFunctions = Map.delete name (emitLoopFunctions st) })
+
+  let whileStmt = StmtWhile (doneVar ++ " == false") (resultStmts bodyResult)
+
+  pure EmitResult
+    { resultStmts = initStmts ++ [whileStmt]
+    , resultValue = resultValue bodyResult
+    }
+
+
+-- | True for 'ValueRep' values that map to classical (non-qubit, non-callable)
+-- OpenQASM expressions.
+isClassicalValue :: ValueRep -> Bool
+isClassicalValue (ValueClassical _) = True
+isClassicalValue _ = False
+
+
+-- | Classical type of a classical 'ValueRep'.
+classicalTypeOf :: ValueRep -> ClassicalType
+classicalTypeOf (ValueClassical (ClassicalVar ty _)) = ty
+classicalTypeOf (ValueClassical (ClassicalIntConst _)) = CTypeInt
+classicalTypeOf (ValueClassical (ClassicalFloatConst _)) = CTypeFloat
+classicalTypeOf _ = CTypeInt
 
 
 applyPrimitiveCallable
@@ -1190,6 +1415,10 @@ renderStmt indentLevel (StmtIfElse condition trueStmts falseStmts) =
     ++ concatMap (renderStmt (indentLevel + 1)) trueStmts
     ++ [indent indentLevel ++ "} else {"]
     ++ concatMap (renderStmt (indentLevel + 1)) falseStmts
+    ++ [indent indentLevel ++ "}"]
+renderStmt indentLevel (StmtWhile cond body) =
+  [indent indentLevel ++ "while (" ++ cond ++ ") {"]
+    ++ concatMap (renderStmt (indentLevel + 1)) body
     ++ [indent indentLevel ++ "}"]
 renderStmt indentLevel (StmtSwitch scrutinee arms) =
   [indent indentLevel ++ "switch (" ++ scrutinee ++ ") {"]
