@@ -36,7 +36,11 @@ both emitted arms. It does not yet:
 
 - introduce reusable OpenQASM `def` helpers for shared continuations
 - create backend phi-like merges for branch-produced values
-- rewrite CPS `CSwitch` into explicit named join continuations
 
 So it improves common inline control cases, but it is not the final answer for
 arbitrary branch merging.
+
+The CPS-level fix (named join continuations in `ToCPS.hs`) was landed
+separately — see `notes/switch-join-continuation-2026-03-31.md`. The emitter
+still uses suffix hoisting to deduplicate the OpenQASM output it produces from
+those join-continuation calls.

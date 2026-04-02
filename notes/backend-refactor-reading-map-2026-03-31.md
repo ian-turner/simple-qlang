@@ -183,16 +183,16 @@ Output expected from the planning pass:
   subset of `CFix`
 - a scoped fallback strategy for everything the new path does not yet cover
 
-### Implementation pass 1
+### Implementation pass 1 — *done at CPS level*
 
 Primary references: Kelsey, Maurer
 
-Target:
+Target (landed in commit `cb490fe`):
 
-- isolate `CSwitch` lowering in `src/OpenQASM.hs`
-- add explicit branch/join lowering for the exact named-join shape now emitted
-  by `src/ToCPS.hs`
-- preserve the current recursive emitter path as fallback
+- named join continuation in `src/ToCPS.hs` for `LSwitch` — done
+- `src/OpenQASM.hs` still uses suffix hoisting to deduplicate emitted output;
+  explicit branch/join lowering in the emitter is the remaining work here
+- current recursive emitter path preserved as fallback — done
 
 ### Implementation pass 2
 
@@ -200,7 +200,7 @@ Primary references: Kelsey, Kennedy
 
 Target:
 
-- thread branch-produced values through explicit join parameters
+- thread branch-produced values through explicit join parameters in the emitter
 - run shared continuation code once after the branch instead of relying on
   suffix hoisting
 - validate nested `if/else` and measurement-controlled examples
@@ -223,8 +223,9 @@ join structure in CPS.  Generic SSA or code-generation textbooks are less
 likely to help with the immediate FunQ issue than these control-flow-specific
 references.
 
-The first implementation should stay narrow:
+The CPS-level join-continuation fix is done.  The remaining work is narrowly
+in the emitter:
 
-- fix `if/else` branch joins
+- teach the emitter to recognise join-continuation calls as branch exits
 - do not attempt a whole-backend replacement in the same pass
 - keep current emitter behavior available for unsupported shapes
