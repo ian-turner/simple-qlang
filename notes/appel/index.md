@@ -5,26 +5,30 @@ Compiler described: Standard ML of New Jersey (SML/NJ).
 
 This directory contains chapter-by-chapter notes on the book, focused on how
 each chapter's content applies to the FunQ → OpenQASM/QIR compilation pipeline.
-See also `../cps-compilation-strategy.md` for the high-level strategy document.
+See also [../pipeline.md](../pipeline.md) for the high-level strategy document and [../index.md](../index.md) for the full knowledge index.
 
 ---
 
 ## FunQ Compilation Pipeline → Appel Chapter Map
 
-| Stage | Description | Appel chapter(s) |
-|---|---|---|
-| 1 ✓ | Parse + type-check FunQ (linear types) | FunQ-specific, not in Appel |
-| 2 ✓ | Lower to λ-calculus-like form; desugar patterns/data | Ch 4 (§4.1–4.2, §4.5–4.8) |
-| 3 ✓ | Convert to CPS | Ch 5 |
-| 4a | β-contraction, constant folding | Ch 6 (§6.1–6.2) |
-| 4b | Eta reduction, cascading optimizations | Ch 6 (§6.2–6.3) |
-| 4c | Beta expansion (inlining) | Ch 7 |
-| 4d | Hoisting | Ch 8 |
-| 4e | Common subexpression elimination | Ch 9 |
-| 5 ✓ | Recursion elimination (pre-closure-conv check; unrolling deferred) | FunQ-specific |
-| 6 ✓ | Closure conversion (eliminate free variables) | Ch 10 |
-| 7 | Register spilling (bound free-variable count) | Ch 11 |
-| 8 | Emit OpenQASM / QIR | Replaces Chs 13–14 (abstract machine + codegen) |
+| Stage | Description | Appel chapter(s) | Status |
+|---|---|---|---|
+| 1 | Parse + scope resolve | FunQ-specific | done |
+| 2 | Lower to λ-calculus-like form; desugar patterns/data | Ch 4 (§4.1–4.2, §4.5–4.8) | done |
+| 3 | Convert to CPS | Ch 5 | done |
+| 4 | Recursion check + tail-loop recognition | FunQ-specific | done |
+| 5 | Record-shape analysis + interface flattening | FunQ-specific | done |
+| 6 | Gate/def classification | FunQ-specific | done |
+| 7 | Closure conversion (eliminate free variables) | Ch 10 | done |
+| 8 | Defunctionalization | FunQ-specific | done |
+| 9 | Qubit hoisting | FunQ-specific | done |
+| 10 | Local record flattening | FunQ-specific | done |
+| 11 | Emit OpenQASM | Replaces Chs 13–14 | done (first cut) |
+| — | β-contraction, constant folding | Ch 6 §6.1–6.2 | deferred |
+| — | Beta expansion (inlining) | Ch 7 | deferred |
+| — | Hoisting | Ch 8 | deferred |
+| — | CSE | Ch 9 | deferred |
+| — | Register spilling | Ch 11 | deferred |
 
 Stages 1–7 follow Appel directly or with small quantum-specific modifications
 noted in each chapter file. Stage 8 replaces Appel's classical backend: instead of

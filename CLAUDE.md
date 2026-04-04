@@ -58,8 +58,8 @@ running the examples manually.
 FunQ is a functional quantum language with planned linear types that currently
 targets OpenQASM. The middle end is intended to stay reusable for a future QIR
 backend. The planned compilation pipeline follows Appel's *Compiling with
-Continuations* (1992). See `notes/cps-compilation-strategy.md` for the full
-pipeline with required/optional classification.
+Continuations* (1992). See `notes/pipeline.md` for the full pipeline and `notes/index.md` for the
+knowledge index.
 
 **Current priority**: complete all required stages end-to-end before
 introducing any optional optimizations or the linear type checker.
@@ -116,9 +116,26 @@ These affect every phase of the compiler and must not be violated:
 
 ---
 
-## Notes
+## Knowledge system
+
+The `notes/` directory is a structured knowledge library. Use it as follows:
+
+**Before making changes:**
+- Read `notes/index.md` for orientation
+- Read the relevant `notes/passes/<pass>.md` note before touching any pass
+- Read `notes/design-decisions.md` and `notes/quantum-semantics.md` before
+  making architectural choices
+
+**After making changes:**
+- Update the relevant pass note if behavior, invariants, or ordering changed
+- Update `notes/pipeline.md` if the pipeline structure changed
+- Update `notes/future/<topic>.md` if you implemented a planned item
+- Remove or correct any note that now contradicts the code
+
+Notes must stay accurate and concise. Do not leave a note saying something is
+"planned" or a "limitation" if you just implemented or fixed it.
+
+## Other notes
 
 - The `resources/` directory is git-ignored (contains reference PDFs).
-- The `notes/` directory contains compiler design notes — keep them updated
-  when making significant design decisions.
 - Branch `claude-staging` is the working branch; `master` is the main branch.

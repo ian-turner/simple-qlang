@@ -127,8 +127,11 @@ src/
   Utils.hs              — shared utilities
 examples/               — sample FunQ programs
 notes/                  — compiler design notes
+  index.md              — top-level knowledge index (start here)
+  pipeline.md           — full CPS pipeline design
   appel/                — chapter-by-chapter notes on Appel (1992)
-  cps-compilation-strategy.md — high-level CPS pipeline design
+  passes/               — per-pass design notes
+  future/               — planned work
 resources/              — reference PDFs (git-ignored)
 ```
 

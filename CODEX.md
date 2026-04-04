@@ -2,51 +2,78 @@
 
 Codex-specific project context for FunQ.
 
-## What Matters Most
+---
+
+## Knowledge system
+
+The `notes/` directory is a structured knowledge library. Read and update it
+alongside any non-trivial code change:
+
+- **Read first:** `notes/index.md` (orientation), then the relevant
+  `notes/passes/<pass>.md` note before touching pass code.
+- **Update after:** if you change a pass's behavior, position, or invariants,
+  update its note. If you resolve a "planned" item, update `notes/future/`.
+  Notes must not contradict the code.
+
+See `AGENTS.md` for the full knowledge-system policy.
+
+---
+
+## What matters most
 
 - Preserve a clean separation between backend-neutral IR passes and
   OpenQASM-specific lowering
 - Do not introduce backend assumptions early unless they are recorded as a
-  deliberate design decision
+  deliberate design decision in `notes/design-decisions.md`
 - When a design choice changes the pipeline or semantics, update the matching
-  notes in `notes/`
+  note in `notes/`
 
-## Pipeline Summary
+---
 
-1. Parse and resolve names
-2. Lower to Lambda IR
-3. Convert to CPS
-4. Check/eliminate recursion (reject recursive local `CFix`; allow bounded top-level self-recursion via `src/BoundedRecursion.hs`)
-5. Module-level record-shape inference (`src/RecordShape.hs`)
-6. Interface record flattening (`src/ModuleRecordFlatten.hs`)
-7. Classify `gate` vs `def` (`src/GateDef.hs`)
-8. Closure convert
-9. Defunctionalize
-10. Qubit hoisting
-11. Local record flattening (`src/RecordFlatten.hs`)
-12. Emit OpenQASM
+## Pipeline summary
 
-## Semantics To Preserve
+| # | Stage | Module(s) |
+|---|---|---|
+| 1 | Parse + scope resolve | `Parser.hs`, `Resolve.hs` |
+| 2 | Lower to Lambda IR | `Lower.hs` |
+| 3 | CPS conversion | `ToCPS.hs` |
+| 4 | Recursion check + tail-loop recognition | `RecElim.hs`, `BoundedRecursion.hs`, `CompilePipeline.hs` |
+| 5 | Record-shape analysis + interface flattening | `RecordShape.hs`, `ModuleRecordFlatten.hs` |
+| 6 | Gate/def classification | `GateDef.hs` |
+| 7 | Closure conversion | `ClosureConv.hs` |
+| 8 | Defunctionalization | `Defunc.hs` |
+| 9 | Qubit hoisting | `QubitHoist.hs` |
+| 10 | Local record flattening | `RecordFlatten.hs` |
+| 11 | OpenQASM emission | `OpenQASM.hs` |
 
-- Qubits are linear values and must not be duplicated
-- Measurement consumes qubits and yields classical control
-- Closure conversion must not be used as an excuse to hide qubit-lifetime
-  issues; later typing rules should still reject invalid post-measurement use
+---
 
-## Practical Workflow
+## Semantics to preserve
 
-- Read `README.md`, `AGENTS.md`, and the relevant note in `notes/` before
-  changing pipeline code
-- Prefer checking `src/Main.hs`, `src/CPSExp.hs`, `src/RecElim.hs`, and
-  `src/ClosureConv.hs` first when working on compiler stages
-- Verify meaningful compiler changes with `cabal build` and at least one
-  example run
+- Qubits are linear values and must not be duplicated or discarded silently
+- Measurement consumes its qubit and yields a classical `Bool`; later branching
+  on that value is expressed through a separate `CSwitch`, not at the
+  measurement site
+- Closure conversion must not capture qubits as free variables
+- See `notes/quantum-semantics.md` for the full constraint list
 
-## Current Gaps
+---
+
+## Practical workflow
+
+1. Read `notes/index.md` and the relevant pass note before changing pipeline code
+2. Read `notes/design-decisions.md` before making architectural choices
+3. Verify with `cabal build` and at least one example run
+4. Update the relevant notes file after the change
+
+---
+
+## Current gaps
 
 - No type checker yet
-- No automated test suite yet
-- OpenQASM emitter exists but does not yet emit reusable `gate` / `def` declarations (inlines everything from `output`)
-- Bounded recursion is supported via budget-unrolling; explicit loop IR and static-list erasure are future work
-- QIR remains future scope only; keep current code focused on OpenQASM while
+- No automated test suite
+- Emitter does not yet emit reusable `gate`/`def` declarations (inlines from `output`)
+- Bounded recursion uses budget-unrolling; explicit loop IR and static-list
+  erasure are future work (see `notes/future/bounded-recursion.md`)
+- QIR is future scope only; keep current code focused on OpenQASM while
   preserving backend-neutral middle-end structure

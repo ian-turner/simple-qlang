@@ -1,40 +1,59 @@
 # Design Decisions
 
-This file records project-level decisions that affect multiple compiler passes.
+Project-level decisions that affect multiple compiler passes.
 
-## Backend Scope
+See also: [quantum-semantics.md](quantum-semantics.md), [pipeline.md](pipeline.md)
 
-OpenQASM is the only active backend for now. The compilation pipeline should
-remain target-neutral through the middle end so future backends such as QIR can
-reuse the same normalized IR.
+---
 
-Implication:
+## Backend scope
+
+OpenQASM is the only active backend. The pipeline stays target-neutral through
+the middle end so a future QIR backend can reuse the same normalized IR.
+
 - CPS conversion, recursion handling, closure conversion, and
-  defunctionalization should not encode OpenQASM-specific constraints unless a
+  defunctionalization must not encode OpenQASM-specific constraints unless a
   backend-neutral formulation is impossible
-- stage-status notes and top-level project docs should describe OpenQASM as the
-  current target, with QIR mentioned only as future scope
+- OpenQASM-specific passes begin with qubit declaration strategy, gate/def
+  classification, and final emission
 
-## Measurement Semantics
+## Measurement is a single-result primitive
 
-`meas` is a consuming primitive.
+`meas : Qubit -> Bool`. The input qubit is consumed; any branching on the
+result goes through a separate `CSwitch`. See
+[quantum-semantics.md](quantum-semantics.md) for rationale and the full
+constraint context.
 
-- Surface signature: `Qubit -> Bool`
-- Semantic rule: the input qubit is consumed by measurement and cannot be used
-  afterward
-- Enforcement point: the future linear type checker should reject any use of a
-  measured qubit after the `meas` call
+## Emit from interface-flattened CPS, not fully defunctionalized form
 
-This keeps the surface language simple while making the linear lifetime rule
-explicit in the specification.
+The current emitter runs on the interface-flattened CPS rather than the
+closure-converted/defunctionalized output. This boundary:
+- Keeps top-level calls as direct `VLabel` references (readable, debuggable)
+- Avoids closure/tag scaffolding that is correct but irrelevant to OpenQASM
+  emission
+- Lets global qubit allocation happen during emission rather than per-declaration
 
-## Initial Qubit Allocation Policy
+When a more sophisticated backend is needed (reusable `gate`/`def` declarations,
+explicit join-point lowering), the boundary will move later in the pipeline.
 
-The first backend allocation pass should use a simple static policy:
+## Qubit allocation: one slot per `init`
 
-- count each `init` in the program
-- allocate one backend qubit slot per `init`
-- do not attempt liveness-based slot reuse yet
+Conservative static policy: one backend qubit slot per `init` in the program,
+no liveness-based reuse. Slot reuse can be added later as an optimization once
+correctness is established end-to-end.
 
-This is intentionally conservative. Reuse based on qubit liveness can be added
-later as an optimization pass once correctness is established end-to-end.
+See [passes/qubit-hoisting.md](passes/qubit-hoisting.md).
+
+## Float literals are preserved symbolically
+
+Float literals (including `pi`) are stored as `String` from parsing through to
+emission. This keeps the middle end backend-neutral — OpenQASM can use `pi`
+directly, and a future QIR backend can lower symbolic constants differently.
+
+## Gate/def classification runs on interface-flattened CPS
+
+The classifier runs before closure conversion so it sees clean pre-closure
+interfaces. After closure conversion, nearly everything has extra records and
+indirect calls that would collapse the `gate` class.
+
+See [passes/gate-def-classification.md](passes/gate-def-classification.md).
