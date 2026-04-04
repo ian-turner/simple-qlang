@@ -1,0 +1,10 @@
+module bad_func where
+
+
+bad_func : Unit -> Unit
+bad_func x =
+    let q = init ()
+    in bad_func ()
+
+
+output = bad_func ()
