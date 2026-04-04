@@ -8,9 +8,52 @@ See also: [../pipeline.md](../pipeline.md), [../future/bounded-recursion.md](../
 
 ## Overview
 
-OpenQASM has no general runtime recursion. The compiler must either:
-- Reject programs with unsupported recursion (compile-time error), or
-- Compile bounded self-recursion to an OpenQASM `while` loop.
+OpenQASM has no general runtime recursion, and qubit arrays must be declared
+with a static size. This means the compiler must statically determine the total
+qubit count for any well-formed program. Self-recursive functions therefore fall
+into exactly three classes:
+
+### Class 1 — Static recursion → `for` loop
+
+The trip count is a compile-time constant. Qubits may accumulate across
+iterations because `total = count × allocs_per_iter` is statically known. The
+counter argument at the call site must be a `VInt n` literal (or evaluable to
+one via constant folding).
+
+Example: `init_n 4` — 0 qubits in, 4 qubits out, trip count = 4.
+
+### Class 2 — Dynamic recursion → `while` loop
+
+The trip count is not statically known. The invariant that makes this safe is
+**qubit neutrality**: every `init` in the loop body must be consumed by a `meas`
+on that same qubit before the recursive call. The set of qubit arguments passed
+to the recursive call must equal the set of qubit parameters of the function —
+no new qubits escape to the next iteration. QubitHoist assigns one slot to each
+`init` inside the body; physical reuse is valid because measurement collapses
+the qubit to `|0>`.
+
+Example: `rus_loop` — 1 qubit in, 1 qubit out; ancilla allocated and measured
+within each iteration.
+
+### Class 3 — Reject
+
+Dynamic trip count **and** qubit accumulation. This would require an unbounded
+qubit array — not representable in OpenQASM. Must produce a compile-time error
+with a message that explains the constraint.
+
+Example: `init_n x` where `x` is a runtime variable.
+
+### Type-level encoding
+
+With linear types, the class of a recursive function falls out from its type.
+Define `qubits(T)` = number of qubit slots in type `T` (`Qubit` → 1, tuples sum,
+`List a` of length n → `n × qubits(a)`, classical types → 0). For a function
+`A → B`:
+- `qubits(B) > qubits(A)` → qubits accumulate; requires static trip count → Class 1 only
+- `qubits(B) = qubits(A)` → qubit-neutral; valid while-loop candidate → Class 2
+- `qubits(B) < qubits(A)` → qubit-consuming; valid while-loop candidate
+
+---
 
 Three checks run in order before backend emission.
 
@@ -54,7 +97,20 @@ allowed through.
 **Recognition (`BoundedRecursion.hs`):** identifies self-recursive declarations
 where every recursive call passes the outer continuation unchanged — either
 directly or via η-trivial chains (including Appel's curried-application
-intermediates). These are "tail loops."
+intermediates). These are tail loops (Class 2 candidates).
+
+**Class 2 qubit-neutrality is already enforced by `isTailLoop`:** a function
+that accumulates qubits across iterations must build a new continuation that
+captures newly allocated qubits (e.g. `init_n` builds a growing `Cons` chain).
+This modifies the continuation, causing `isTailLoop` to return `False`. Under the
+linear-typing assumption, a function that passes `isTailLoop = True` cannot
+accumulate qubits. No additional while-loop qubit-neutrality check is required.
+
+**Class 3 early rejection (planned):** the outstanding work is detecting the case
+where a qubit-accumulating recursive function is called with a runtime-variable
+argument (not `VInt n`). This should produce a clear compile error at the call
+site rather than falling into the depth-1000 inline expansion fallback. See
+[../future/bounded-recursion.md](../future/bounded-recursion.md) for the plan.
 
 **Emission (`isTailLoop` in `OpenQASM.hs`):** a recognized tail loop emits as
 an OpenQASM 3.0 `while` loop. The loop body is the function body; the
@@ -68,23 +124,29 @@ while (!m) {
 }
 ```
 
-**Fallback for non-tail-loop self-recursion:** guarded inline expansion with a
-depth limit of 1000 calls. If the limit is reached, the compiler emits a
-compile-time error. This handles bounded loops (e.g. `countdown.funq`) and
-probabilistic repeat-until-success circuits (e.g. `rus.funq`) where the
-recursion is provably finite but the bound may not be statically known.
+**Current fallback for non-tail-loop self-recursion:** guarded inline expansion
+with a depth limit of 1000 calls. This is transitional — see
+[../future/bounded-recursion.md](../future/bounded-recursion.md) for the planned
+replacement (static shape inference + `CFor` IR + static list erasure).
+
+**Current correctness gap:** Class 3 programs (dynamic trip count + qubit
+accumulation, e.g. `init_n x` where `x` is a runtime variable) currently fall
+into the 1000-call budget and may silently "succeed" or fail with a misleading
+depth error. They should fail early with a message explaining the constraint.
 
 ---
 
 ## Supported recursion patterns
 
-| Pattern | Handling |
-|---|---|
-| Single-function self-recursion (tail loop) | Compiled to `while` |
-| Single-function self-recursion (non-tail-loop) | Inline expansion, depth 1000 |
-| Multi-function `CFix` with any recursion | Compile-time error |
-| Top-level label cycles | Compile-time error |
-| Structural list recursion with dynamic bounds | Not yet supported — see [../future/bounded-recursion.md](../future/bounded-recursion.md) |
+| Pattern | Class | Handling |
+|---|---|---|
+| Tail loop, qubit-neutral body | 2 (dynamic) | Compiled to `while` |
+| Tail loop, qubit-accumulating, static trip count | 1 (static) | Planned: `for` loop via `CFor` IR |
+| Tail loop, qubit-accumulating, runtime trip count | 3 (reject) | Should error early; currently falls into depth-1000 budget |
+| Non-tail-loop self-recursion, static trip count | 1 (static) | Inline expansion (depth 1000); planned: `CFor` IR |
+| Non-tail-loop self-recursion, runtime trip count | 3 (reject) | Should error early; currently falls into depth-1000 budget |
+| Multi-function `CFix` with any recursion | — | Compile-time error |
+| Top-level label cycles | — | Compile-time error |
 
 ---
 

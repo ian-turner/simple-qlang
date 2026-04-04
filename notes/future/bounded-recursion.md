@@ -7,11 +7,41 @@ See also: [../passes/recursion.md](../passes/recursion.md), [../pipeline.md](../
 ## Current state
 
 Self-recursive tail loops compile to OpenQASM `while` loops via `isTailLoop`.
-All other recursive programs — including structural list recursion —  are
+All other recursive programs — including structural list recursion — are
 handled by budget-unrolling in the emitter (depth limit: 1000 calls). This
 covers current examples like `ghz.funq` and `qft_n.funq` but is fragile because
 recursive ADT semantics are split across CPS lowering, interface flattening, and
 emitter-side `ValueRep` reconstruction.
+
+**Correctness gap:** the Class 3 case (dynamic trip count + qubit accumulation,
+e.g. `init_n x` where `x` is a runtime variable) falls into the 1000-call
+budget rather than failing early with a clear error. This is a soundness concern
+because such programs would require an unbounded qubit array.
+
+---
+
+## Architecture decision: `CFor` IR node, not unrolling
+
+The chosen approach is to add a `CFor` constructor to `CPSExp.hs` and thread it
+through all downstream passes, rather than eagerly unrolling static loops in the
+middle end. Reasons:
+
+- Unrolling is cheaper to implement but bloats the IR and the emitted OpenQASM
+  for any moderately large N, and makes it impossible to emit a compact
+  OpenQASM `for` loop.
+- `CFor` with a statically-known trip count emits as a single `for i in [0:N]`
+  statement in OpenQASM 3.0, keeping the output readable and bounded in size.
+- The architectural cost is updating ClosureConv, Defunc, QubitHoist,
+  RecordFlatten, and the OpenQASM emitter to handle `CFor` and the companion
+  `VQubitArr` value constructor. These are mostly mechanical traversal cases,
+  with the exception of QubitHoist (see below).
+
+`CFor` represents Class 1 (static) loops only. The upper bound must be
+statically derivable from the top-level call site — either a literal `VInt n`
+or a `VVar` that refers to an outer loop index (for nested loops). The lower
+bound may be a `VVar` from an outer loop (e.g. `i+1` for the inner loop of a
+QFT). Class 2 (dynamic) loops continue to use the existing `isTailLoop` →
+`while` path. There is no unbounded-trip-count `CFor`.
 
 ---
 
@@ -19,18 +49,61 @@ emitter-side `ValueRep` reconstruction.
 
 Support recursive functions that can be rewritten into finite loops or
 fixed-size dataflow before backend emission, without attempting general
-recursion.
+recursion. The key constraint driving all decisions is that OpenQASM qubit
+arrays must have a statically-known size.
+
+This induces a two-class design for self-recursive functions:
+
+- **Class 1 — static (`for` loop)**: trip count is a compile-time constant;
+  qubits may accumulate across iterations because the total is statically
+  bounded. The counter argument at the call site must be a `VInt n` literal
+  (or evaluable by constant folding). Target: OpenQASM `for i in [0:N]`.
+
+- **Class 2 — dynamic (`while` loop)**: trip count is not statically known;
+  requires a **qubit-neutral body** — every `init` in the body is consumed by
+  a `meas` on that same qubit before the recursive call. No new qubits escape
+  to the next iteration; the qubit parameter set is preserved exactly. QubitHoist
+  assigns one slot per `init` inside the body; physical reuse is valid because
+  measurement collapses the qubit to `|0>`. Target: OpenQASM `while (cond)`.
+
+- **Class 3 — reject**: dynamic trip count and qubit accumulation. Must fail
+  early with an error explaining that the trip count must be a compile-time
+  constant when the function allocates qubits proportional to the count.
+
+**Type-level encoding:** with linear types, the class follows from `qubits(B)` vs
+`qubits(A)` for a function `A → B` (where `qubits(T)` counts qubit slots in `T`,
+with `List a` of length n contributing `n × qubits(a)`). If `qubits(B) > qubits(A)`,
+the function must be Class 1. If `qubits(B) = qubits(A)`, it is a Class 2 candidate.
 
 Target patterns:
-- Counted self-recursion over `Int`
-- Structural recursion over statically sized lists
-- Explicit loop and fixed-size aggregate lowering before closure conversion
+- Counted self-recursion over `Int` with static argument → Class 1 (`for`)
+- Structural recursion over statically sized lists → Class 1 after shape inference
+- Qubit-neutral tail loops (like RUS) → Class 2 (`while`)
 
-Anything outside that fragment should continue to produce a compile-time error.
+Anything outside that fragment should produce a compile-time error.
 
 ---
 
 ## Proposed new passes
+
+### 0. Class 3 early rejection (`src/OpenQASM.hs`)
+
+Before adding new passes, close the existing correctness gap: when the emitter
+encounters a recursive function that contains `CPrimOp PInit` in its body and is
+called with a non-`VInt` argument (i.e., a runtime-variable trip count), it must
+fail immediately with a clear error message rather than falling into inline
+expansion at depth 1000.
+
+Detection: at the call site `CApp (VLabel name) (arg : _)`, if `name` is known
+to be recursive and qubit-allocating and `arg` is not `VInt n`, emit a compile
+error: "function `name` allocates qubits proportional to its argument; the
+argument must be a compile-time constant."
+
+Note: Class 2 qubit-neutrality (the `while`-loop case) is already enforced
+implicitly by `isTailLoop`. A function that modifies its continuation — which is
+the only way to accumulate qubits across iterations — already fails `isTailLoop`
+and never reaches the while-loop path. No additional while-loop check is needed
+under the linear-typing assumption.
 
 ### 1. Static shape inference (`src/StaticShape.hs`)
 
@@ -61,20 +134,32 @@ rejected if it participates in recursion.
 
 Replace reject-only recursion handling with a pass that:
 - Recognizes bounded recursive patterns
-- Rewrites them into explicit loop IR
+- Rewrites them into explicit loop IR, preserving the full loop structure
 - Rejects everything that remains unsupported
+
+`CFor` is generated for **all** bounded recursive functions, including pure
+qubit-allocation loops like `init_n`. The IR faithfully represents the loop
+even when the only operation is `PInit`. It is QubitHoist (not this pass) that
+decides what the loop means at emission time — stripping `PInit` for OpenQASM,
+or emitting dynamic allocation for QIR.
 
 Proposed CPS extension (`src/CPSExp.hs`):
 
 ```haskell
 | CFor
     Variable      -- index variable
-    Value         -- trip count
-    [Variable]    -- loop-carried variables
-    [Value]       -- initial carried values
+    Value         -- lower bound (inclusive) — usually VInt 0, but can be a VVar for nested loops
+    Value         -- upper bound (inclusive) — static VInt (n-1), or dynamic VVar for inner loops
     CExp          -- body
     CExp          -- exit continuation
 ```
+
+Using explicit lower/upper bounds (both `Value`) rather than a single trip count
+allows the inner loop of a nested pair to start at `i+1` where `i` is the outer
+index variable. The cost is negligible and avoids a constructor change later.
+
+A `CFor` body is a `CExp`, so nesting is structural — an outer `CFor` body may
+contain an inner `CFor`. Every traversal pass recurses into the body as normal.
 
 List recursion should be lowered into counted iteration rather than a separate
 list-specific loop node if possible.
@@ -87,6 +172,93 @@ After bounded list recursion is lowered:
 - Let existing record flattening handle the resulting aggregates
 
 This is required because OpenQASM has no runtime algebraic data structures.
+
+---
+
+## Downstream pass requirements for `CFor`
+
+Every pass between bounded recursion lowering and OpenQASM emission must be
+updated to handle the new `CFor` constructor.
+
+### ClosureConv, Defunc, RecordFlatten
+
+Mechanical structural traversal cases — `CFor` is walked like other binding
+forms. The body is a scope in which the index variable and loop-carried
+variables are bound. No deep semantic change needed.
+
+### QubitHoist
+
+This is the most significant change. The transformation is **OpenQASM-specific**:
+the IR faithfully preserves `PInit` inside `CFor` bodies (so a future QIR backend
+can emit dynamic block allocation), but QubitHoist strips it for the OpenQASM
+path, replacing it with a static array declaration.
+
+Concretely, when `hoistExp` descends into a `CFor`:
+1. Pre-scan the body to count `PInit` calls and compute the iteration count from
+   the bounds.
+2. Allocate `count × N` consecutive slots in a batch.
+3. **Remove each `PInit` from the body** and inject `q → VQubitArr base (VVar i)`
+   into the hoisting environment. The qubit variable is now available in the body
+   via `VQubitArr` without an explicit allocation step.
+4. If the `CFor` body is **empty after PInit removal** (all it did was allocate
+   qubits — e.g. `init_n`), **drop the `CFor` node entirely**. The only OpenQASM
+   output is the top-level `qubit[N] q;` declaration, which is emitted from the
+   hoisted slot count as today. No `for` loop is emitted.
+5. If the body still contains gate or measurement operations, keep the `CFor` with
+   the PInit-stripped body.
+
+For nested loops, the inner loop's `PInit` uses `VQubitArr base (VVar j)` where
+`j` is the inner index. Each array is allocated a contiguous batch of slots.
+
+`PInit` inside a `while` loop (Class 2) continues to allocate one slot (reused
+each iteration because measurement collapses the qubit to `|0>`).
+
+**QIR compatibility note:** a future QIR backend should use a different hoist
+pass (or skip hoisting entirely) and instead emit the `CFor` with `PInit` as
+dynamic per-iteration qubit allocation (`__quantum__rt__qubit_allocate()` or
+equivalent). The IR representation is intentionally backend-neutral.
+
+### `VQubitArr` — dynamic qubit indexing
+
+A new `Value` constructor is needed to represent loop-indexed qubit references:
+
+```haskell
+| VQubitArr Int Value   -- qubit at static base slot + dynamic index value
+```
+
+`VQubitArr base (VVar i)` is the dynamic counterpart of `VQubit k`. It is
+produced only by QubitHoist (never by earlier passes). All passes between
+QubitHoist and emission handle it as a new `Value` case — mechanical in
+ClosureConv and Defunc (already done by then), and in RecordFlatten and the
+emitter. `extractQubitArg` in the emitter gains a `VQubitArr` branch.
+
+The emitter renders `VQubitArr base idx` as `q[base + idx]` (or `q[idx]` when
+`base = 0`).
+
+### OpenQASM emitter
+
+Add `StmtFor Variable Value Value [Stmt]` to the `Stmt` type (matching the
+`CFor` lower/upper bound design) and handle `CFor` in `runExp`. The emitted
+form is `for i in [lo:hi] { body }`. Qubit references inside the body use
+`VQubitArr` and render as `q[base + i]`. The top-level `qubit[n] q;`
+declaration is emitted from the hoisted slot count as today.
+
+The emitter will never see a `CFor` whose body is empty after QubitHoist, since
+QubitHoist drops such nodes. Any `CFor` reaching the emitter has at least one
+gate or measurement statement in its body.
+
+`CPrimOp PCpGate` currently requires a `ClassicalIntConst k` for the rotation
+index. Inside a loop, `k` is a `ClassicalVar`. The emitter's `PCpGate` handler
+must also accept a dynamic classical value and emit `cp(pi / pow(2, k))` rather
+than a precomputed literal.
+
+### StaticListErase dependency on QubitHoist
+
+`StaticListErase` (pass 6 in the pipeline) erases `List a` of known size `n`
+into a flat `n`-tuple before QubitHoist runs. This is required so that the
+`CFor` body's qubit outputs have statically-addressable record fields, enabling
+QubitHoist to assign concrete slot numbers. The passes must run in order:
+StaticListErase → ClosureConv → Defunc → QubitHoist → RecordFlatten.
 
 ---
 
@@ -126,13 +298,15 @@ plan above is the right long-term replacement.
 
 ## Recommended implementation order
 
-1. Add loop IR to `src/CPSExp.hs`
-2. Implement counted-`Int` recursion lowering first
-3. Emit counted loops in `src/OpenQASM.hs` (OpenQASM 3.0 `for` or `while`)
-4. Add static list-length inference
-5. Add structural list recursion lowering
-6. Add static list erasure to records/tuples
-7. Re-run `examples/ghz.funq` and adjust later passes
+1. **Class 3 early rejection** in `OpenQASM.hs` — close the correctness gap without structural changes
+2. **Add `CFor` and `VQubitArr` to `CPSExp.hs`** — define both constructors together; add structural traversal cases to `ClosureConv.hs`, `Defunc.hs`, `RecordFlatten.hs` (no semantic change needed in these three)
+3. **StaticShape** (`StaticShape.hs`) — infer finite list lengths from top-level bindings
+4. **StaticListErase** (`StaticListErase.hs`) — erase `List a` of known size into fixed records; runs in `CompilePipeline.hs` before closure conversion
+5. **Bounded recursion lowering** — detect countdown and structural list recursion patterns; emit `CFor` with static or dynamic bounds; reject dynamic trip counts on qubit-allocating functions
+6. **QubitHoist** update — allocate N consecutive slots for `PInit` inside `CFor`; replace with `VQubitArr base (VVar i)`; handle nested loops correctly
+7. **OpenQASM emitter** update — add `StmtFor`, handle `CFor` and `VQubitArr`, emit `for i in [lo:hi]` and `q[base + i]`; handle dynamic `PCpGate` rotation index
+8. **Wire into `CompilePipeline.hs`** — insert StaticShape, StaticListErase, and bounded recursion lowering at the right stages
+9. **Validate** — re-run all examples: `ghz.funq`, `qft_n.funq`, `rus.funq`, `countdown.funq`, `tele.funq`, `bell00.funq`
 
 ---
 
