@@ -4,3 +4,4 @@
 **/*.pdf
 *dist*
 tmp
+/**/.obsidian
