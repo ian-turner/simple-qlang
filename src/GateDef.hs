@@ -18,7 +18,7 @@ import Utils (Variable)
 data CallableKind
   = CallableGate
   | CallableDef
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
 
 data ModuleCallableKinds = ModuleCallableKinds

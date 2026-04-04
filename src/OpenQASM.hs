@@ -1,17 +1,21 @@
 module OpenQASM
   ( emitOpenQASM
+  , emitOpenQASMViaCFG
   ) where
 
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Control.Monad (foldM)
 import Control.Monad.State.Strict
-import Data.List (intercalate)
+import Data.List (intercalate, partition)
 
+import CFG
 import CPSExp
 import BoundedRecursion (TopLevelFunction(..), extractTopLevelFunction)
 import CompilePipeline
+import GateDef (CallableKind(..))
 import LambdaIR (PrimOp(..))
+import ToCFG (toCFGModule)
 import Utils (Variable)
 
 
@@ -94,8 +98,20 @@ type Env = Map.Map Variable ValueRep
 type EmitM = StateT EmitState (Either String)
 
 
+-- | Emit OpenQASM 3.0 for a compiled module.
+-- Tries the CFG-based path first; falls back to the legacy interpreter path
+-- if the CFG path fails (e.g. for quantum programs with cross-declaration
+-- qubit flows not yet supported by the CFG backend).
 emitOpenQASM :: CompiledModule -> Either String String
-emitOpenQASM compiledModule = do
+emitOpenQASM compiledModule =
+  case emitOpenQASMViaCFG compiledModule of
+    Right qasm -> Right qasm
+    Left _     -> emitOpenQASMLegacy compiledModule
+
+
+-- | Legacy interpreter-based OpenQASM emitter (kept for fallback).
+emitOpenQASMLegacy :: CompiledModule -> Either String String
+emitOpenQASMLegacy compiledModule = do
   rejectCompileErrors compiledModule
   outputExp <- findOutputExp compiledModule
   let moduleEnv = buildModuleEnv compiledModule
@@ -727,7 +743,7 @@ isTailLoop name params body =
     --       join/result continuations)
     effectiveContinuationIs contParam (localDefs, args) =
       case reverse args of
-        (VVar v : _) -> reachesContParam localDefs v
+        (VVar v : _) -> reachesContParam Set.empty localDefs v
         _            -> False
       where
         -- A variable "reaches the continuation" when:
@@ -740,28 +756,30 @@ isTailLoop name params body =
         --   (c) it is bound to an η-trivial wrapper: (r,[x], CApp (VVar k) [VVar x])
         --   (d) it is bound to a curried-application continuation:
         --       (r,[x], CApp (VVar x) [..args..]) where the last arg reaches.
-        reachesContParam _ v | v == contParam = True
-        reachesContParam defs v =
-          case Map.lookup v defs of
-            Nothing ->
-              -- Free variable: it's a parameter coming from outside this scope,
-              -- i.e. a continuation endpoint such as k2 in a curried function body.
-              -- NOTE: This is a known conservative over-approximation. If malformed
-              -- CPS somehow placed a non-continuation free variable at the end of
-              -- an η-chain, isTailLoop would incorrectly return True and compile a
-              -- non-tail-loop function as a while loop. This is safe in practice
-              -- because ToCPS only introduces free variables at continuation
-              -- positions, but it is not verified structurally.
-              True
-            Just (ps, CApp (VVar cont) appArgs)
-              | appArgs == map VVar ps ->
-                  reachesContParam defs cont
-            Just ([x], CApp (VVar appFun) appArgs)
-              | appFun == x
-              , not (null appArgs)
-              , VVar lastArg <- last appArgs ->
-                  reachesContParam defs lastArg
-            _ -> False
+        reachesContParam _ _ v | v == contParam = True
+        reachesContParam visited defs v
+          | Set.member v visited = False  -- cycle: not an η-trivial chain
+          | otherwise =
+              case Map.lookup v defs of
+                Nothing ->
+                  -- Free variable: it's a parameter coming from outside this scope,
+                  -- i.e. a continuation endpoint such as k2 in a curried function body.
+                  -- NOTE: This is a known conservative over-approximation. If malformed
+                  -- CPS somehow placed a non-continuation free variable at the end of
+                  -- an η-chain, isTailLoop would incorrectly return True and compile a
+                  -- non-tail-loop function as a while loop. This is safe in practice
+                  -- because ToCPS only introduces free variables at continuation
+                  -- positions, but it is not verified structurally.
+                  True
+                Just (ps, CApp (VVar cont) appArgs)
+                  | appArgs == map VVar ps ->
+                      reachesContParam (Set.insert v visited) defs cont
+                Just ([x], CApp (VVar appFun) appArgs)
+                  | appFun == x
+                  , not (null appArgs)
+                  , VVar lastArg <- last appArgs ->
+                      reachesContParam (Set.insert v visited) defs lastArg
+                _ -> False
 
 
 -- | Compile a self-recursive top-level function as an OpenQASM while loop.
@@ -1437,3 +1455,368 @@ renderStmt _ (StmtGate _ qs) =
 indent :: Int -> String
 indent n =
   replicate (2 * n) ' '
+
+
+-- ===========================================================================
+-- CFG IR renderer (new path, added in step 8)
+-- ===========================================================================
+
+
+-- | Render context for IRStmt rendering.
+data CFGRenderCtx = CFGRenderCtx
+  { crcIsEntry   :: Bool
+    -- ^ True when rendering the entry-point ("output") function body inline.
+  , crcFuncKind  :: CallableKind
+    -- ^ Kind of the function currently being rendered (for halt handling).
+  , crcOutLayout :: IROutputLayout
+    -- ^ Output variable layout (used to emit output assignments at halt).
+  , crcKindMap   :: Map.Map String CallableKind
+    -- ^ Map from function name to kind (for rendering tail calls).
+  }
+
+
+-- | Compile a CompiledModule via the CFG IR and render to QASM 3.0.
+emitOpenQASMViaCFG :: CompiledModule -> Either String String
+emitOpenQASMViaCFG cm = do
+  cfgm <- toCFGModule cm
+  validateCFGModule cfgm
+  pure (renderCFGModule cfgm)
+
+
+-- | Validate a CFGModule before rendering, returning Left for cases where the
+-- CFG backend cannot yet produce correct QASM (triggering legacy fallback).
+--
+-- Currently rejects:
+--   • Qubit-typed output (quantum outputs need measurement, not yet handled).
+--   • IRVar names that look like unresolved nominal atoms ("va", "vb", etc.),
+--     which indicate variables that escaped name resolution.
+validateCFGModule :: CFGModule -> Either String ()
+validateCFGModule cfgm = do
+  -- Reject qubit output layout.
+  case cfgOutputLayout cfgm of
+    IROutputArray IRQubit _ ->
+      Left "CFG: qubit-array output not supported (missing measurement)"
+    IROutputScalars tys
+      | IRQubit `elem` tys ->
+          Left "CFG: qubit scalar output not supported (missing measurement)"
+    _ -> Right ()
+  -- Reject functions whose bodies contain unresolved nominal-atom variable refs.
+  mapM_ checkFunc (cfgFunctions cfgm)
+  where
+    checkFunc f =
+      case findUnresolvedVar (irFuncBody f) of
+        Just bad -> Left ("CFG: unresolved variable '" ++ bad ++ "' in " ++ irFuncName f)
+        Nothing  -> Right ()
+
+    findUnresolvedVar [] = Nothing
+    findUnresolvedVar (s : rest) = checkStmt s `mfirst` findUnresolvedVar rest
+
+    checkStmt (IRLet _ _ b)       = checkBinding b
+    checkStmt (IRAssign _ a)      = checkAtom a
+    checkStmt (IRGate _ as)       = mconcat (map checkAtom as)
+    checkStmt (IRTailCall _ as)   = mconcat (map checkAtom as)
+    checkStmt (IRIf a t e)        = checkAtom a
+                                      `mfirst` findUnresolvedVar t
+                                      `mfirst` findUnresolvedVar e
+    checkStmt (IRWhile a body)    = checkAtom a `mfirst` findUnresolvedVar body
+    checkStmt (IRSwitch a arms)   = checkAtom a
+                                      `mfirst` mconcat [findUnresolvedVar ss | (_, ss) <- arms]
+
+    checkBinding (IRBindPrim _ as)  = mconcat (map checkAtom as)
+    checkBinding (IRBindMeas a)     = checkAtom a
+    checkBinding (IRBindSelect _ a) = checkAtom a
+    checkBinding (IRBindOffset _ a) = checkAtom a
+    checkBinding (IRBindRecord as)  = mconcat (map checkAtom as)
+
+    -- Detect nominal-atom display names like "va", "vb", "vc" (single letter
+    -- after the "v" prefix from varName).  These indicate a variable that was
+    -- not found in any name map and fell back to the raw nominal display.
+    checkAtom (IRVar name)
+      | length name == 2, head name == 'v', last name `elem` ['a'..'z']
+      = Just name
+    -- A qubit slot appearing in a halt arg means the function "returns" a
+    -- qubit, which is not valid in QASM def semantics.
+    checkAtom (IRQubitSlot _) = Just "qubit-in-halt"
+    checkAtom _ = Nothing
+
+    mfirst (Just x) _ = Just x
+    mfirst Nothing  y = y
+
+    mconcat [] = Nothing
+    mconcat (x:xs) = x `mfirst` mconcat xs
+
+
+-- | Render a CFGModule to QASM 3.0 source.
+renderCFGModule :: CFGModule -> String
+renderCFGModule cfgm =
+  unlines $
+    [ "OPENQASM 3.0;"
+    , "include \"stdgates.inc\";"
+    ]
+    ++ qubitDecl
+    ++ renderIROutputDecls layout
+    ++ [""]
+    ++ concatMap (\f -> renderIRFunction kindMap retTypeMap f ++ [""]) nonEntryFuncs
+    ++ entryLines
+  where
+    layout       = cfgOutputLayout cfgm
+    entryName    = cfgEntryPoint cfgm
+    kindMap      = Map.fromList [(irFuncName f, irFuncKind f) | f <- cfgFunctions cfgm]
+    retTypeMap   = Map.fromList [(irFuncName f, inferFuncReturnType f) | f <- cfgFunctions cfgm]
+    (entryFuncs, nonEntryFuncs) =
+      partition (\f -> irFuncName f == entryName) (cfgFunctions cfgm)
+    qubitDecl
+      | cfgQubitCount cfgm > 0 = ["qubit[" ++ show (cfgQubitCount cfgm) ++ "] q;"]
+      | otherwise = []
+    entryLines =
+      case entryFuncs of
+        [ef] -> renderEntryBody kindMap layout ef
+        _    -> []
+
+
+-- | Render a function definition block (not the entry point).
+renderIRFunction
+  :: Map.Map String CallableKind
+  -> Map.Map String (Maybe IRType)
+  -> IRFunction
+  -> [String]
+renderIRFunction kindMap retTypeMap func =
+  let name   = irFuncName func
+      params = irFuncParams func
+      kind   = irFuncKind func
+      ctx    = CFGRenderCtx
+        { crcIsEntry   = False
+        , crcFuncKind  = kind
+        , crcOutLayout = IROutputScalars []
+        , crcKindMap   = kindMap
+        }
+      bodyLines = concatMap (renderIRStmt 1 ctx) (irFuncBody func)
+  in case kind of
+       CallableGate ->
+         -- Gate: qubit params are positional identifiers.
+         -- Note: our IR uses global qubit slots (q[i]), so non-parameterised
+         -- bodies are emitted inside a gate block for structuring purposes.
+         let qParams = [irParamName p | p <- params, irParamType p == IRQubit]
+             pStr    = intercalate ", " qParams
+         in ["gate " ++ name
+               ++ (if null pStr then "" else " " ++ pStr)
+               ++ " {"]
+              ++ bodyLines ++ ["}"]
+       CallableDef ->
+         let pStrs  = [ renderIRType (irParamType p) ++ " " ++ irParamName p
+                      | p <- params
+                      , irParamType p /= IRUnit
+                      ]
+             pStr   = intercalate ", " pStrs
+             retStr = case Map.lookup name retTypeMap of
+               Just (Just ty) | ty /= IRUnit && ty /= IRQubit
+                              -> " -> " ++ renderIRType ty
+               _              -> ""
+         in ["def " ++ name ++ "(" ++ pStr ++ ")" ++ retStr ++ " {"]
+              ++ bodyLines ++ ["}"]
+
+
+-- | Render the entry-point function body as top-level QASM statements.
+renderEntryBody
+  :: Map.Map String CallableKind
+  -> IROutputLayout
+  -> IRFunction
+  -> [String]
+renderEntryBody kindMap layout func =
+  let ctx = CFGRenderCtx
+        { crcIsEntry   = True
+        , crcFuncKind  = irFuncKind func
+        , crcOutLayout = layout
+        , crcKindMap   = kindMap
+        }
+  in concatMap (renderIRStmt 0 ctx) (irFuncBody func)
+
+
+-- | Render a single IRStmt at the given indentation level.
+renderIRStmt :: Int -> CFGRenderCtx -> IRStmt -> [String]
+renderIRStmt ind _ (IRGate name atoms) =
+  [indent ind ++ name ++ " " ++ intercalate ", " (map renderIRAtom atoms) ++ ";"]
+renderIRStmt ind _ (IRAssign v atom) =
+  [indent ind ++ v ++ " = " ++ renderIRAtom atom ++ ";"]
+renderIRStmt ind _ (IRLet v IRBit (IRBindMeas q)) =
+  [indent ind ++ "bit " ++ v ++ " = measure " ++ renderIRAtom q ++ ";"]
+renderIRStmt ind _ (IRLet v ty (IRBindPrim op args)) =
+  [indent ind ++ renderIRType ty ++ " " ++ v ++ " = " ++ renderPrimExprCFG op args ++ ";"]
+renderIRStmt ind _ (IRLet v ty (IRBindSelect i a)) =
+  [indent ind ++ renderIRType ty ++ " " ++ v ++ " = "
+     ++ renderIRAtom a ++ "[" ++ show i ++ "];"]
+renderIRStmt ind _ (IRLet v ty (IRBindOffset i a)) =
+  [indent ind ++ renderIRType ty ++ " " ++ v ++ " = "
+     ++ renderIRAtom a ++ " + " ++ show i ++ ";"]
+renderIRStmt ind _ (IRLet v ty (IRBindRecord as)) =
+  [indent ind ++ renderIRType ty ++ " " ++ v ++ " = {"
+     ++ intercalate ", " (map renderIRAtom as) ++ "};"]
+renderIRStmt ind ctx (IRTailCall "halt" args) =
+  renderHaltCFG ind ctx args
+renderIRStmt ind ctx (IRTailCall name atoms) =
+  renderNonHaltCall ind ctx name atoms
+renderIRStmt ind ctx (IRIf cond thenStmts elseStmts) =
+  [indent ind ++ "if (" ++ renderIRAtom cond ++ " == 1) {"]
+    ++ concatMap (renderIRStmt (ind + 1) ctx) thenStmts
+    ++ (if null elseStmts
+          then [indent ind ++ "}"]
+          else [indent ind ++ "} else {"]
+                 ++ concatMap (renderIRStmt (ind + 1) ctx) elseStmts
+                 ++ [indent ind ++ "}"])
+renderIRStmt ind ctx (IRSwitch atom arms) =
+  [indent ind ++ "switch (" ++ renderIRAtom atom ++ ") {"]
+    ++ concatMap renderArm arms
+    ++ [indent ind ++ "}"]
+  where
+    renderArm (tag, stmts) =
+      [indent (ind + 1) ++ "case " ++ show tag ++ ":"]
+        ++ [indent (ind + 2) ++ "{"]
+        ++ concatMap (renderIRStmt (ind + 3) ctx) stmts
+        ++ [indent (ind + 2) ++ "}"]
+renderIRStmt ind ctx (IRWhile cond body) =
+  [indent ind ++ "while (" ++ renderIRAtom cond ++ " == false) {"]
+    ++ concatMap (renderIRStmt (ind + 1) ctx) body
+    ++ [indent ind ++ "}"]
+
+
+-- | Render a halt tail call as output assignments (entry point) or return
+-- (non-entry def) or nothing (gate).
+renderHaltCFG :: Int -> CFGRenderCtx -> [IRAtom] -> [String]
+renderHaltCFG ind ctx args
+  | crcIsEntry ctx = renderOutputAssignsCFG ind (crcOutLayout ctx) args
+  | crcFuncKind ctx == CallableGate = []
+  | otherwise =
+      case args of
+        []  -> [indent ind ++ "return;"]
+        [a] -> [indent ind ++ "return " ++ renderIRAtom a ++ ";"]
+        _   -> [indent ind ++ "return " ++ intercalate ", " (map renderIRAtom args) ++ ";"]
+
+
+-- | Render a non-halt tail call.
+-- In the entry point context, a tail call to a def should assign the return
+-- value to the output variable; a tail call to a gate is just a statement.
+renderNonHaltCall :: Int -> CFGRenderCtx -> String -> [IRAtom] -> [String]
+renderNonHaltCall ind ctx name atoms =
+  let calleeKind = Map.findWithDefault CallableDef name (crcKindMap ctx)
+      argStr     = intercalate ", " (map renderIRAtom atoms)
+      callExpr   = case calleeKind of
+        CallableGate -> name ++ " " ++ argStr
+        CallableDef  -> name ++ "(" ++ argStr ++ ")"
+  in if crcIsEntry ctx
+       then case calleeKind of
+              CallableDef -> renderCallWithOutput ind (crcOutLayout ctx) callExpr
+              CallableGate -> [indent ind ++ callExpr ++ ";"]
+       else [indent ind ++ callExpr ++ ";"]
+
+
+-- | Render a def call whose return value is assigned to the output variable(s).
+renderCallWithOutput :: Int -> IROutputLayout -> String -> [String]
+renderCallWithOutput ind layout callExpr =
+  case layout of
+    IROutputScalars []  -> [indent ind ++ callExpr ++ ";"]
+    IROutputScalars [_] -> [indent ind ++ "output_0 = " ++ callExpr ++ ";"]
+    IROutputScalars tys ->
+      -- Multiple scalars: assign to each output_i; only supported for single call
+      [indent ind ++ "{ " ++ intercalate ", "
+         ["output_" ++ show i | i <- [0 .. length tys - 1]]
+         ++ " } = " ++ callExpr ++ ";"]
+    IROutputArray _ _ -> [indent ind ++ "output = " ++ callExpr ++ ";"]
+
+
+-- | Render output assignment statements (from a halt call in the entry point).
+renderOutputAssignsCFG :: Int -> IROutputLayout -> [IRAtom] -> [String]
+renderOutputAssignsCFG ind (IROutputArray _ _) args =
+  [ indent ind ++ "output[" ++ show i ++ "] = " ++ renderIRAtom a ++ ";"
+  | (i, a) <- zip [0 :: Int ..] args
+  ]
+renderOutputAssignsCFG ind (IROutputScalars _) args =
+  [ indent ind ++ "output_" ++ show i ++ " = " ++ renderIRAtom a ++ ";"
+  | (i, a) <- zip [0 :: Int ..] args
+  ]
+
+
+-- | Render output variable declarations from the IR layout.
+renderIROutputDecls :: IROutputLayout -> [String]
+renderIROutputDecls (IROutputScalars tys) =
+  [ renderIRType ty ++ " output_" ++ show i ++ ";"
+  | (i, ty) <- zip [0 :: Int ..] tys
+  ]
+renderIROutputDecls (IROutputArray IRBit n) =
+  ["bit[" ++ show n ++ "] output;"]
+renderIROutputDecls (IROutputArray ty n) =
+  ["array[" ++ renderIRType ty ++ ", " ++ show n ++ "] output;"]
+
+
+-- | Render an IRAtom as a QASM expression.
+renderIRAtom :: IRAtom -> String
+renderIRAtom (IRVar name)       = name
+renderIRAtom (IRQubitSlot i)    = "q[" ++ show i ++ "]"
+renderIRAtom (IRIntConst n)     = show n
+renderIRAtom (IRFloatConst s)   = s
+renderIRAtom (IRBitConst True)  = "true"
+renderIRAtom (IRBitConst False) = "false"
+renderIRAtom IRUnitVal          = "0"
+
+
+-- | Render an IR type as a QASM type string.
+renderIRType :: IRType -> String
+renderIRType IRInt         = "int[32]"
+renderIRType IRFloat       = "float[64]"
+renderIRType IRBool        = "bool"
+renderIRType IRBit         = "bit"
+renderIRType IRQubit       = "qubit"
+renderIRType IRUnit        = "/*unit*/"
+renderIRType (IRRecord _)  = "/*record*/"
+renderIRType IRLabel       = "int[32]"
+
+
+-- | Render a classical primitive operation expression.
+-- Handles some constant-folding cases for cleaner output.
+renderPrimExprCFG :: PrimOp -> [IRAtom] -> String
+renderPrimExprCFG PNot [IRIntConst 0]     = "true"
+renderPrimExprCFG PNot [IRIntConst 1]     = "false"
+renderPrimExprCFG PAdd [a, IRIntConst 0]  = renderIRAtom a
+renderPrimExprCFG PSub [a, IRIntConst 0]  = renderIRAtom a
+renderPrimExprCFG PAdd [a, b]  = renderIRAtom a ++ " + " ++ renderIRAtom b
+renderPrimExprCFG PSub [a, b]  = renderIRAtom a ++ " - " ++ renderIRAtom b
+renderPrimExprCFG PMul [a, b]  = renderIRAtom a ++ " * " ++ renderIRAtom b
+renderPrimExprCFG PDiv [a, b]  = renderIRAtom a ++ " / " ++ renderIRAtom b
+renderPrimExprCFG PEq  [a, b]  = renderIRAtom a ++ " == " ++ renderIRAtom b
+renderPrimExprCFG PLt  [a, b]  = renderIRAtom a ++ " < "  ++ renderIRAtom b
+renderPrimExprCFG PGt  [a, b]  = renderIRAtom a ++ " > "  ++ renderIRAtom b
+renderPrimExprCFG PLe  [a, b]  = renderIRAtom a ++ " <= " ++ renderIRAtom b
+renderPrimExprCFG PGe  [a, b]  = renderIRAtom a ++ " >= " ++ renderIRAtom b
+renderPrimExprCFG PAnd [a, b]  = renderIRAtom a ++ " && " ++ renderIRAtom b
+renderPrimExprCFG POr  [a, b]  = renderIRAtom a ++ " || " ++ renderIRAtom b
+renderPrimExprCFG PNot [a]     = "!" ++ renderIRAtom a
+renderPrimExprCFG op   _       = "/* unsupported primop " ++ show op ++ " */"
+
+
+-- | Infer the return type of a function from its IRTailCall "halt" argument.
+-- Returns Nothing if halt has zero or multiple args; Just ty for a single arg.
+inferFuncReturnType :: IRFunction -> Maybe IRType
+inferFuncReturnType func =
+  findHaltType (irFuncBody func)
+  where
+    findHaltType [] = Nothing
+    findHaltType (IRTailCall "halt" args : _) =
+      case args of
+        [a] -> Just (atomTypeCFG a)
+        _   -> Nothing
+    findHaltType (IRIf _ t e : rest) =
+      findHaltType t `malt` findHaltType e `malt` findHaltType rest
+    findHaltType (IRWhile _ body : rest) =
+      findHaltType body `malt` findHaltType rest
+    findHaltType (IRSwitch _ arms : rest) =
+      foldr (\(_, ss) acc -> findHaltType ss `malt` acc) (findHaltType rest) arms
+    findHaltType (_ : rest) = findHaltType rest
+
+    malt (Just x) _ = Just x
+    malt Nothing y  = y
+
+    atomTypeCFG (IRQubitSlot _) = IRQubit
+    atomTypeCFG (IRIntConst _)  = IRInt
+    atomTypeCFG (IRFloatConst _)= IRFloat
+    atomTypeCFG (IRBitConst _)  = IRBit
+    atomTypeCFG IRUnitVal       = IRUnit
+    atomTypeCFG (IRVar _)       = IRBit

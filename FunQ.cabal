@@ -79,6 +79,8 @@ executable funq
         Defunc
         QubitHoist
         GateDef
+        CFG
+        ToCFG
         OpenQASM
         ModuleRecordFlatten
         RecordFlatten
