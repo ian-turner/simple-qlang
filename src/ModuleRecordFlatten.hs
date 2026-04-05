@@ -81,6 +81,14 @@ flattenExp shapes _ scope env (CPrimOp op args results conts) =
        results
        (map (flattenExp shapes Nothing scope env') conts)
 
+flattenExp shapes _ scope env (CFor idx lo hi body cont) =
+  let lo'   = rewriteValue env lo
+      hi'   = rewriteValue env hi
+      env'  = Map.delete idx env
+      body' = flattenExp shapes Nothing scope env' body
+      cont' = flattenExp shapes Nothing scope env cont
+  in CFor idx lo' hi' body' cont'
+
 
 flattenDef
   :: ModuleRecordShapes

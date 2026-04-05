@@ -47,6 +47,7 @@ checkExp (COffset _ _ _ body)       = checkExp body
 checkExp (CApp _ _)                 = return ()
 checkExp (CSwitch _ arms)           = mapM_ checkExp arms
 checkExp (CPrimOp _ _ _ conts)      = mapM_ checkExp conts
+checkExp (CFor _ _ _ body cont)     = checkExp body >> checkExp cont
 checkExp (CFix defs body) = do
   let names = Set.fromList [f | (f, _, _) <- defs]
   -- Single-function groups: self-recursion is allowed (compiled to a while loop
@@ -85,5 +86,6 @@ calleesInExp (CApp (VVar v) _)        = Set.singleton v
 calleesInExp (CApp _ _)               = Set.empty
 calleesInExp (CSwitch _ arms)         = Set.unions (map calleesInExp arms)
 calleesInExp (CPrimOp _ _ _ conts)    = Set.unions (map calleesInExp conts)
+calleesInExp (CFor _ _ _ body cont)   = calleesInExp body `Set.union` calleesInExp cont
 calleesInExp (CFix defs body)         =
   Set.unions (calleesInExp body : [calleesInExp b | (_, _, b) <- defs])

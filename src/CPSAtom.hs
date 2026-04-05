@@ -108,6 +108,7 @@ rewriteValue env val@(VVar v) =
   case Map.lookup v env of
     Just (AScalar val') -> val'
     _                   -> val
+rewriteValue env (VQubitArr base idx) = VQubitArr base (rewriteValue env idx)
 rewriteValue _ val = val
 
 
@@ -134,6 +135,11 @@ occursInExp v (CSwitch val arms) =
 occursInExp v (CPrimOp _ args results conts) =
   any (occursInValue v) args
   || if v `elem` results then False else any (occursInExp v) conts
+occursInExp v (CFor idx lo hi body cont) =
+  occursInValue v lo
+  || occursInValue v hi
+  || (v /= idx && occursInExp v body)
+  || occursInExp v cont
 
 
 occursInDef :: Variable -> [Variable] -> (Variable, [Variable], CExp) -> Bool
@@ -149,5 +155,6 @@ occursInFields v =
 
 
 occursInValue :: Variable -> Value -> Bool
-occursInValue v (VVar x) = v == x
-occursInValue _ _        = False
+occursInValue v (VVar x)          = v == x
+occursInValue v (VQubitArr _ idx) = occursInValue v idx
+occursInValue _ _                 = False

@@ -20,6 +20,7 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 | Qubit hoisting — static slot assignment | [passes/qubit-hoisting.md](passes/qubit-hoisting.md) |
 | Gate/def classification | [passes/gate-def-classification.md](passes/gate-def-classification.md) |
 | OpenQASM emitter — architecture and design notes | [passes/openqasm-emission.md](passes/openqasm-emission.md) |
+| Static shape analysis — list sizes and parametric shapes | [passes/static-shape.md](passes/static-shape.md) |
 | Bounded recursion lowering — future plan | [future/bounded-recursion.md](future/bounded-recursion.md) |
 | Backend refactor — CPS→SSA reading map | [future/backend-refactor.md](future/backend-refactor.md) |
 | Reference papers — download manifest | [resources.md](resources.md) |
@@ -53,6 +54,7 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 | `Defunc.hs` | Defunctionalization: replaces runtime code pointers with tags and dispatch |
 | `QubitHoist.hs` | Hoists `init` to static qubit slots |
 | `RecordFlatten.hs` | Local record simplification after qubit hoisting |
+| `StaticShape.hs` | Whole-module list-size / aggregate shape inference |
 | `Main.hs` | Entry point: parses CLI args, calls `compileModule`, prints OpenQASM |
 
 ---

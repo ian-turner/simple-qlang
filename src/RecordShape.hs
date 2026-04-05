@@ -111,6 +111,10 @@ collectExpArities _ scope (CSwitch _ arms) =
   Map.unionsWith preferTopLevel (map (collectExpArities Nothing scope) arms)
 collectExpArities _ scope (CPrimOp _ _ _ conts) =
   Map.unionsWith preferTopLevel (map (collectExpArities Nothing scope) conts)
+collectExpArities _ scope (CFor _ _ _ body cont) =
+  Map.unionWith preferTopLevel
+    (collectExpArities Nothing scope body)
+    (collectExpArities Nothing scope cont)
 collectExpArities exportAlias scope (CFix defs body) =
   let localScope = bindFunctionKeys exportAlias defs scope
       localArities =
@@ -188,6 +192,11 @@ analyzeExp interfaces _ scope env (CPrimOp op _args results conts) =
        [ analyzeExp interfaces Nothing scope env' cont
        | cont <- conts
        ]
+
+analyzeExp interfaces _ scope env (CFor _ _ _ body cont) =
+  Map.unionWith mergeShapeLists
+    (analyzeExp interfaces Nothing scope env body)
+    (analyzeExp interfaces Nothing scope env cont)
 
 
 analyzeDef

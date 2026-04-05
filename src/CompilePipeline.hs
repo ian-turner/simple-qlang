@@ -171,6 +171,8 @@ topLevelCallees (CSwitch _ arms) =
   Set.unions (map topLevelCallees arms)
 topLevelCallees (CPrimOp _ _ _ conts) =
   Set.unions (map topLevelCallees conts)
+topLevelCallees (CFor _ _ _ body cont) =
+  topLevelCallees body `Set.union` topLevelCallees cont
 
 
 prepareDecl :: ModuleRecordShapes -> CompiledItem -> CompiledItem

@@ -108,6 +108,8 @@ selfCallCounters selfName expr =
       concatMap (selfCallCounters selfName) arms
     CPrimOp _ _ _ conts ->
       concatMap (selfCallCounters selfName) conts
+    CFor _ _ _ body cont ->
+      selfCallCounters selfName body ++ selfCallCounters selfName cont
 
 
 bindsCountdownStep :: Variable -> Variable -> CExp -> Bool
@@ -133,6 +135,9 @@ bindsCountdownStep counter nextCounter expr =
           any (bindsCountdownStep counter nextCounter) conts
     CPrimOp _ _ _ conts ->
       any (bindsCountdownStep counter nextCounter) conts
+    CFor _ _ _ body cont ->
+      bindsCountdownStep counter nextCounter body
+        || bindsCountdownStep counter nextCounter cont
 
 
 containsSelfCall :: String -> CExp -> Bool
@@ -156,3 +161,5 @@ containsSelfCall selfName expr =
       any (containsSelfCall selfName) arms
     CPrimOp _ _ _ conts ->
       any (containsSelfCall selfName) conts
+    CFor _ _ _ body cont ->
+      containsSelfCall selfName body || containsSelfCall selfName cont

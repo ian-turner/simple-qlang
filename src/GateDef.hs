@@ -107,6 +107,8 @@ collectLocalBodies (CSwitch _ arms) =
   Map.unions (map collectLocalBodies arms)
 collectLocalBodies (CPrimOp _ _ _ conts) =
   Map.unions (map collectLocalBodies conts)
+collectLocalBodies (CFor _ _ _ body cont) =
+  collectLocalBodies body `Map.union` collectLocalBodies cont
 
 
 iterateLocalKinds
@@ -147,6 +149,8 @@ classifyExp topKinds localKinds (CPrimOp op _ _ conts)
       mergeKinds (map (classifyExp topKinds localKinds) conts)
   | otherwise =
       CallableDef
+classifyExp topKinds localKinds (CFor _ _ _ body cont) =
+  mergeKinds [classifyExp topKinds localKinds body, classifyExp topKinds localKinds cont]
 
 
 calleeKind

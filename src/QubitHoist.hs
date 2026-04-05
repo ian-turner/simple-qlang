@@ -67,6 +67,12 @@ hoistExp env (COffset off val v body) = do
   body' <- hoistExp (Map.delete v env) body
   pure $ COffset off (rewriteValue env val) v body'
 
+hoistExp env (CFor idx lo hi body cont) = do
+  let env' = Map.delete idx env
+  body' <- hoistExp env' body
+  cont' <- hoistExp env cont
+  pure $ CFor idx (rewriteValue env lo) (rewriteValue env hi) body' cont'
+
 
 hoistDef :: Subst -> (Variable, [Variable], CExp) -> HoistM (Variable, [Variable], CExp)
 hoistDef env (f, params, body) = do
@@ -82,4 +88,5 @@ rewriteField env (val, path) = (rewriteValue env val, path)
 rewriteValue :: Subst -> Value -> Value
 rewriteValue env val@(VVar v) =
   Map.findWithDefault val v env
+rewriteValue env (VQubitArr base idx) = VQubitArr base (rewriteValue env idx)
 rewriteValue _ val = val

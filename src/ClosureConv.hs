@@ -74,10 +74,16 @@ freeVars (CPrimOp _ args results conts) =
   Set.unions (map fvVal args)
   `Set.union` Set.unions
     [ freeVars c `Set.difference` Set.fromList results | c <- conts ]
+freeVars (CFor idx lo hi body cont) =
+  fvVal lo
+  `Set.union` fvVal hi
+  `Set.union` Set.delete idx (freeVars body)
+  `Set.union` freeVars cont
 
 fvVal :: Value -> Set.Set Variable
-fvVal (VVar v) = Set.singleton v
-fvVal _        = Set.empty
+fvVal (VVar v)          = Set.singleton v
+fvVal (VQubitArr _ idx) = fvVal idx
+fvVal _                 = Set.empty
 
 
 -- ---------------------------------------------------------------------------
@@ -133,6 +139,11 @@ ccExp (CApp (VVar v) args) =
 -- VLabel call (e.g. "halt"): no closure needed, pass through unchanged.
 ccExp (CApp fn args) =
   return $ CApp fn args
+
+ccExp (CFor idx lo hi body cont) = do
+  body' <- ccExp body
+  cont' <- ccExp cont
+  return $ CFor idx lo hi body' cont'
 
 -- FIX group: the main case.
 ccExp (CFix defs body) = do

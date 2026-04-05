@@ -362,6 +362,9 @@ runExp moduleEnv env (CSwitch val arms) haltK = do
 runExp moduleEnv env (CPrimOp op args results conts) haltK =
   runPrimOp moduleEnv env op args results conts haltK
 
+runExp _ _ (CFor _ _ _ _ _) _ =
+  lift $ Left "OpenQASM emission failed: CFor not yet supported (step 7 of bounded-recursion plan)."
+
 
 bindFix :: Env -> [(Variable, [Variable], CExp)] -> Env
 bindFix env defs =
@@ -512,6 +515,10 @@ evalValue _ _ (VQubit i) =
   pure EmitResult { resultStmts = [], resultValue = ValueQubit i }
 evalValue _ _ VUnit =
   pure EmitResult { resultStmts = [], resultValue = ValueUnit }
+evalValue _ _ (VQubitArr base idx) =
+  lift $ Left $
+    "OpenQASM emission failed: VQubitArr (base=" ++ show base ++ ", idx=" ++ show idx
+    ++ ") reached the emitter without loop context (step 7 of bounded-recursion plan)."
 evalValue moduleEnv _ (VLabel name) =
   evalTopLevelValue moduleEnv name
 
@@ -657,7 +664,21 @@ applyTopLevelCallable moduleEnv name topLevelFun args haltK
         Nothing ->
           if isTailLoop name (tlfParams topLevelFun) (tlfBody topLevelFun)
             then compileAsLoop moduleEnv name topLevelFun args haltK
-            else do
+            else
+              -- Class 3 early rejection: self-recursive + qubit-allocating + dynamic trip count.
+              -- This combination requires an unbounded qubit array, which OpenQASM cannot emit.
+              if bodyIsSelfRecursive name (tlfBody topLevelFun)
+                  && bodyAllocatesQubits (tlfBody topLevelFun)
+                  && not (any isStaticInt args)
+                then lift $
+                  Left
+                    ( "OpenQASM emission failed: `"
+                        ++ name
+                        ++ "` allocates qubits proportional to its argument, but the "
+                        ++ "argument is not a compile-time constant. The total qubit count "
+                        ++ "must be statically known. Pass a literal integer at the call site."
+                    )
+              else do
               depth <- gets emitInlineDepth
               if depth <= 0
                 then
@@ -717,6 +738,9 @@ isTailLoop name params body =
       concatMap (findSelfCallsInScope localDefs n) arms
     findSelfCallsInScope localDefs n (CPrimOp _ _ _ conts) =
       concatMap (findSelfCallsInScope localDefs n) conts
+    findSelfCallsInScope localDefs n (CFor _ _ _ forBody forCont) =
+      findSelfCallsInScope localDefs n forBody
+        ++ findSelfCallsInScope localDefs n forCont
 
     -- The effective continuation of a call is the outer contParam when the
     -- last arg is either:
@@ -762,6 +786,36 @@ isTailLoop name params body =
               , VVar lastArg <- last appArgs ->
                   reachesContParam defs lastArg
             _ -> False
+
+
+-- | True if the CExp contains any direct self-call to the named top-level label.
+bodyIsSelfRecursive :: String -> CExp -> Bool
+bodyIsSelfRecursive name = go
+  where
+    go (CRecord _ _ body)         = go body
+    go (CSelect _ _ _ body)       = go body
+    go (COffset _ _ _ body)       = go body
+    go (CApp (VLabel l) _)        = l == name
+    go (CApp _ _)                 = False
+    go (CFix defs body)           = any (\(_, _, b) -> go b) defs || go body
+    go (CSwitch _ arms)           = any go arms
+    go (CPrimOp _ _ _ conts)      = any go conts
+    go (CFor _ _ _ body cont)     = go body || go cont
+
+
+-- | True if the CExp contains any CPrimOp PInit (qubit allocation).
+bodyAllocatesQubits :: CExp -> Bool
+bodyAllocatesQubits = go
+  where
+    go (CRecord _ _ body)         = go body
+    go (CSelect _ _ _ body)       = go body
+    go (COffset _ _ _ body)       = go body
+    go (CApp _ _)                 = False
+    go (CFix defs body)           = any (\(_, _, b) -> go b) defs || go body
+    go (CSwitch _ arms)           = any go arms
+    go (CPrimOp PInit _ _ _)      = True
+    go (CPrimOp _ _ _ conts)      = any go conts
+    go (CFor _ _ _ body cont)     = go body || go cont
 
 
 -- | Compile a self-recursive top-level function as an OpenQASM while loop.
@@ -841,6 +895,12 @@ compileAsLoop moduleEnv name topLevelFun args haltK = do
     { resultStmts = initStmts ++ [whileStmt]
     , resultValue = resultValue bodyResult
     }
+
+
+-- | True for 'ValueRep' values that are compile-time integer constants.
+isStaticInt :: ValueRep -> Bool
+isStaticInt (ValueClassical (ClassicalIntConst _)) = True
+isStaticInt _ = False
 
 
 -- | True for 'ValueRep' values that map to classical (non-qubit, non-callable)

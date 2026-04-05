@@ -67,6 +67,13 @@ defuncExp tagMap (CSwitch val arms) =
 defuncExp tagMap (CPrimOp op args results conts) =
   CPrimOp op args results (map (defuncExp tagMap) conts)
 
+defuncExp tagMap (CFor idx lo hi body cont) =
+  CFor idx
+       (rewriteValue tagMap lo)
+       (rewriteValue tagMap hi)
+       (defuncExp tagMap body)
+       (defuncExp tagMap cont)
+
 
 rewriteField :: TagMap -> (Value, AccessPath) -> (Value, AccessPath)
 rewriteField tagMap (val, path) =
@@ -78,6 +85,7 @@ rewriteValue tagMap (VLabel lbl) =
   case Map.lookup lbl tagMap of
     Just tag -> VInt tag
     Nothing  -> VLabel lbl
+rewriteValue tagMap (VQubitArr base idx) = VQubitArr base (rewriteValue tagMap idx)
 rewriteValue _ val = val
 
 
@@ -104,6 +112,8 @@ collectClosureLabels (CSwitch _ arms) =
   Set.unions (map collectClosureLabels arms)
 collectClosureLabels (CPrimOp _ _ _ conts) =
   Set.unions (map collectClosureLabels conts)
+collectClosureLabels (CFor _ _ _ body cont) =
+  collectClosureLabels body `Set.union` collectClosureLabels cont
 
 
 closureLabelsInFields :: [(Value, AccessPath)] -> Set.Set String

@@ -298,9 +298,11 @@ plan above is the right long-term replacement.
 
 ## Recommended implementation order
 
-1. **Class 3 early rejection** in `OpenQASM.hs` — close the correctness gap without structural changes
-2. **Add `CFor` and `VQubitArr` to `CPSExp.hs`** — define both constructors together; add structural traversal cases to `ClosureConv.hs`, `Defunc.hs`, `RecordFlatten.hs` (no semantic change needed in these three)
-3. **StaticShape** (`StaticShape.hs`) — infer finite list lengths from top-level bindings
+1. **Class 3 early rejection** in `OpenQASM.hs` — ✅ done
+2. **Add `CFor` and `VQubitArr` to `CPSExp.hs`** — ✅ done; structural traversal cases added to all downstream passes
+3. **StaticShape** (`StaticShape.hs`) — ✅ done; see [passes/static-shape.md](../passes/static-shape.md).
+   Current limitations: multi-arg functions and composite bodies (ghz_n, qft_n) resolve
+   to ShapeUnknown; countdown and single-arg list-map patterns are recognized.
 4. **StaticListErase** (`StaticListErase.hs`) — erase `List a` of known size into fixed records; runs in `CompilePipeline.hs` before closure conversion
 5. **Bounded recursion lowering** — detect countdown and structural list recursion patterns; emit `CFor` with static or dynamic bounds; reject dynamic trip counts on qubit-allocating functions
 6. **QubitHoist** update — allocate N consecutive slots for `PInit` inside `CFor`; replace with `VQubitArr base (VVar i)`; handle nested loops correctly

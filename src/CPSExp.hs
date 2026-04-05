@@ -13,12 +13,14 @@ data AccessPath
 -- | Atomic CPS values.  All arguments to CPS operations must be atomic.
 --   Booleans are represented as integers (False = 0, True = 1).
 data Value
-  = VVar   Variable    -- local variable
-  | VLabel String      -- top-level function label (resolved post-linking)
-  | VInt   Int         -- integer or boolean constant (False=0, True=1)
-  | VFloat String      -- symbolic float constant, preserved for backend lowering
-  | VQubit Int         -- statically assigned backend qubit slot
-  | VUnit              -- unit constant
+  = VVar      Variable    -- local variable
+  | VLabel    String      -- top-level function label (resolved post-linking)
+  | VInt      Int         -- integer or boolean constant (False=0, True=1)
+  | VFloat    String      -- symbolic float constant, preserved for backend lowering
+  | VQubit    Int         -- statically assigned backend qubit slot
+  | VQubitArr Int Value   -- loop-indexed qubit: static base slot + dynamic index value
+                          -- produced only by QubitHoist; represents q[base + idx]
+  | VUnit                 -- unit constant
   deriving (Show, Eq)
 
 -- | CPS expression type (Appel Figure 2.1, adapted for FunQ).
@@ -49,4 +51,16 @@ data CExp
     -- ^ Interior pointer into a heap record.
     --   Bind (base + n words) to Variable, continue.
     --   Used to give each function in a shared closure its own field-0 code pointer.
+  | CFor     Variable Value Value CExp CExp
+    -- ^ Counted loop.
+    --   Variable — index variable (bound in body, not in exit continuation)
+    --   Value    — lower bound (inclusive), usually VInt 0
+    --   Value    — upper bound (inclusive), VInt (n-1) or a VVar for inner loops
+    --   CExp     — loop body
+    --   CExp     — exit continuation (executed after the loop)
+    --
+    --   Class 1 (static for-loop) only: the upper bound must be statically
+    --   derivable (VInt or a VVar from an outer CFor index).
+    --   Produced by the bounded-recursion lowering pass; consumed by QubitHoist
+    --   and the OpenQASM emitter.
   deriving (Show)

@@ -68,6 +68,14 @@ flattenExp env (CPrimOp op args results conts) =
        results
        (map (flattenExp env') conts)
 
+flattenExp env (CFor idx lo hi body cont) =
+  let lo'   = rewriteValue env lo
+      hi'   = rewriteValue env hi
+      env'  = Map.delete idx env
+      body' = flattenExp env' body
+      cont' = flattenExp env cont
+  in CFor idx lo' hi' body' cont'
+
 
 flattenDef :: Env -> (Variable, [Variable], CExp) -> (Variable, [Variable], CExp)
 flattenDef env (f, params, body) =
