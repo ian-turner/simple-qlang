@@ -15,6 +15,7 @@ data HoistedProgram = HoistedProgram
   { hoistedQubitCount :: Int
   , hoistedBody       :: CExp
   }
+  deriving (Show)
 
 
 type Subst = Map.Map Variable Value

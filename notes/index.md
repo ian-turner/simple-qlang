@@ -55,7 +55,7 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 | `QubitHoist.hs` | Hoists `init` to static qubit slots |
 | `RecordFlatten.hs` | Local record simplification after qubit hoisting |
 | `StaticShape.hs` | Whole-module list-size / aggregate shape inference |
-| `Main.hs` | Entry point: parses CLI args, calls `compileModule`, prints OpenQASM |
+| `Main.hs` | Entry point: parses CLI args, calls `compileModule`, prints OpenQASM, and can dump intermediate IR with `--debug` |
 
 ---
 
@@ -101,4 +101,5 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 ```bash
 cabal build
 cabal run funq -- examples/bell00.funq
+cabal run funq -- --debug examples/bell00.funq
 ```
