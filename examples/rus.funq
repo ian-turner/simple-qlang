@@ -10,15 +10,14 @@ module rus where
 -- valid because a failed measurement (result 0) collapses it to |0>.
 rus_loop : Qubit -> Qubit
 rus_loop q =
-  let q'   = hgate q
-      anc  = init ()
+  let anc  = init ()
       anc' = hgate anc
       m    = meas anc'
-  in if m then q' else rus_loop q'
+  in if m then q else rus_loop q
 
 
 output : Bool
 output =
-  let q  = init ()
+  let q  = hgate (init ())
       q' = rus_loop q
   in meas q'
