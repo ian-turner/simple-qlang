@@ -18,10 +18,11 @@ Scaffolding for the planned replacement already exists in the codebase:
 `StaticShape.hs`. What is still missing is end-to-end pipeline wiring,
 `CFor`-producing lowering, and emitter support.
 
-**Correctness gap:** the Class 3 case (dynamic trip count + qubit accumulation,
-e.g. `init_n x` where `x` is a runtime variable) falls into the 1000-call
-budget rather than failing early with a clear error. This is a soundness concern
-because such programs would require an unbounded qubit array.
+**Recent progress:** the old Class 3 correctness gap is closed. `OpenQASM.hs`
+now rejects the dynamic qubit-growing case (for example `init_n x` where `x` is
+a runtime variable) before inline expansion. The remaining work is structural:
+wire shape analysis into the pipeline, lower bounded recursion to `CFor`, erase
+static lists, and add real loop-aware hoisting and emission.
 
 ---
 
@@ -209,18 +210,16 @@ Anything outside that fragment should produce a compile-time error.
 
 ## Proposed new passes
 
-### 0. Class 3 early rejection (`src/OpenQASM.hs`)
+### 0. Class 3 early rejection (`src/OpenQASM.hs`) — done
 
-Before adding new passes, close the existing correctness gap: when the emitter
-encounters a recursive function that contains `CPrimOp PInit` in its body and is
-called with a non-`VInt` argument (i.e., a runtime-variable trip count), it must
-fail immediately with a clear error message rather than falling into inline
-expansion at depth 1000.
+The emitter now rejects the case where a recursive function contains
+`CPrimOp PInit` in its body and is called without any compile-time constant
+integer argument, instead of falling into inline expansion at depth 1000.
 
-Detection: at the call site `CApp (VLabel name) (arg : _)`, if `name` is known
-to be recursive and qubit-allocating and `arg` is not `VInt n`, emit a compile
-error: "function `name` allocates qubits proportional to its argument; the
-argument must be a compile-time constant."
+Detection remains emitter-side: at the call site `CApp (VLabel name) (arg : _)`,
+if `name` is known to be recursive and qubit-allocating and no argument is a
+static `VInt n`, emission fails with a compile-time error explaining that the
+qubit-growing recursion requires a compile-time bound.
 
 Note: Class 2 qubit-neutrality (the `while`-loop case) is already enforced
 implicitly by `isTailLoop`. A function that modifies its continuation — which is

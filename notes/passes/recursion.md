@@ -116,11 +116,11 @@ accumulate qubits. No additional while-loop qubit-neutrality check is required.
 well-formed continuation patterns produced by `ToCPS.hs`; it is not a separate
 typed proof of qubit-neutrality.
 
-**Class 3 early rejection (planned):** the outstanding work is detecting the case
-where a qubit-accumulating recursive function is called with a runtime-variable
-argument (not `VInt n`). This should produce a clear compile error at the call
-site rather than falling into the depth-1000 inline expansion fallback. See
-[../future/bounded-recursion.md](../future/bounded-recursion.md) for the plan.
+**Class 3 early rejection (`OpenQASM.hs`):** before falling back to guarded
+inline expansion, the emitter now rejects the case where a self-recursive
+qubit-allocating function is called with no compile-time constant integer
+argument. This closes the earlier soundness hole around programs like
+`init_n x`, which would otherwise require an unbounded qubit array.
 
 **Emission (`isTailLoop` in `OpenQASM.hs`):** a recognized tail loop emits as
 an OpenQASM 3.0 `while` loop. The loop body is the function body; the
@@ -135,14 +135,11 @@ while (!m) {
 ```
 
 **Current fallback for non-tail-loop self-recursion:** guarded inline expansion
-with a depth limit of 1000 calls. This is transitional — see
+with a depth limit of 1000 calls. This remains the path for the static bounded
+cases that have not yet been lowered to `CFor`. Dynamic qubit-growing cases are
+rejected earlier as Class 3 errors. This is transitional — see
 [../future/bounded-recursion.md](../future/bounded-recursion.md) for the planned
 replacement (static shape inference + `CFor` IR + static list erasure).
-
-**Current correctness gap:** Class 3 programs (dynamic trip count + qubit
-accumulation, e.g. `init_n x` where `x` is a runtime variable) currently fall
-into the 1000-call budget and may silently "succeed" or fail with a misleading
-depth error. They should fail early with a message explaining the constraint.
 
 ---
 
@@ -152,9 +149,10 @@ depth error. They should fail early with a message explaining the constraint.
 |---|---|---|
 | Tail loop, qubit-neutral body | 2 (dynamic) | Compiled to `while` |
 | Tail loop, qubit-accumulating, static trip count | 1 (static) | Planned: `for` loop via `CFor` IR |
-| Tail loop, qubit-accumulating, runtime trip count | 3 (reject) | Should error early; currently falls into depth-1000 budget |
+| Tail loop, qubit-accumulating, runtime trip count | 3 (reject) | Compile-time error before inline expansion |
 | Non-tail-loop self-recursion, static trip count | 1 (static) | Inline expansion (depth 1000); planned: `CFor` IR |
-| Non-tail-loop self-recursion, runtime trip count | 3 (reject) | Should error early; currently falls into depth-1000 budget |
+| Non-tail-loop self-recursion, runtime trip count, qubit-accumulating | 3 (reject) | Compile-time error before inline expansion |
+| Non-tail-loop self-recursion, runtime trip count, qubit-neutral | transitional | Guarded inline expansion (depth 1000) |
 | Multi-function `CFix` with any recursion | — | Compile-time error |
 | Top-level label cycles | — | Compile-time error |
 

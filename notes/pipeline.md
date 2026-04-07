@@ -184,7 +184,9 @@ handled by inline expansion.
 identifies self-recursive declarations where every recursive call passes the
 outer continuation unchanged. These become `while` loops at emission time. All
 other self-recursive declarations fall back to guarded inline expansion with a
-1000-call depth limit.
+1000-call depth limit. The emitter also now rejects the Class 3 case where a
+recursive qubit-allocating function is called with no compile-time constant
+bound, rather than letting it run into the inline-expansion budget.
 
 `BoundedRecursion.hs` currently provides `extractTopLevelFunction`, which the
 emitter uses to inspect top-level recursive callables, plus counted-recursion
