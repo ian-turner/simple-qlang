@@ -107,6 +107,6 @@ Phases 1–7 map directly. Phases 8–9 are replaced by:
 
 8. Emit OpenQASM gate sequence / conditional branches
    - `PRIMOP(gate, ...)` → gate instruction
-   - `PRIMOP(meas, ...)` with two conts → measurement + conditional branch
-   - `FIX` of a subroutine → `gate` definition (OpenQASM) or function (QIR)
+   - `PRIMOP(meas, [q], [b], [cont])` → measurement binding; later `SWITCH(b, ...)` → conditional branch
+   - top-level callables are currently inlined from `output`; reusable OpenQASM `gate`/`def` emission remains planned
 9. (Optional) OpenQASM/QIR-level optimisation passes (gate cancellation, etc.)

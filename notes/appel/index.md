@@ -30,9 +30,11 @@ See also [../pipeline.md](../pipeline.md) for the high-level strategy document a
 | — | CSE | Ch 9 | deferred |
 | — | Register spilling | Ch 11 | deferred |
 
-Stages 1–7 follow Appel directly or with small quantum-specific modifications
-noted in each chapter file. Stage 8 replaces Appel's classical backend: instead of
-emitting VAX/MIPS/SPARC assembly, we emit OpenQASM gate sequences or QIR LLVM IR.
+The pipeline mostly follows Appel's CPS story, with FunQ-specific passes
+inserted around it. Stage 6 is an early OpenQASM-facing classification pass
+inserted before closure conversion so it can inspect clean interfaces. Stages
+9–11 replace Appel's classical backend with the current OpenQASM lowering and
+emission path.
 
 ---
 

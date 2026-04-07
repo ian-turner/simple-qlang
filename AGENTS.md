@@ -20,7 +20,9 @@ notes/
 ├── passes/                   — one note per compiler pass
 │   ├── cps-conversion.md
 │   ├── recursion.md
+│   ├── static-shape.md
 │   ├── record-flattening.md
+│   ├── closure-conversion.md
 │   ├── defunctionalization.md
 │   ├── qubit-hoisting.md
 │   ├── gate-def-classification.md

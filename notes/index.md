@@ -16,6 +16,7 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 | CPS conversion details and join continuations | [passes/cps-conversion.md](passes/cps-conversion.md) |
 | Recursion — local rejection, top-level check, while loops | [passes/recursion.md](passes/recursion.md) |
 | Record/tuple flattening — shape analysis and rewriting | [passes/record-flattening.md](passes/record-flattening.md) |
+| Closure conversion — shared flat closures and lifting | [passes/closure-conversion.md](passes/closure-conversion.md) |
 | Defunctionalization — eliminating function values | [passes/defunctionalization.md](passes/defunctionalization.md) |
 | Qubit hoisting — static slot assignment | [passes/qubit-hoisting.md](passes/qubit-hoisting.md) |
 | Gate/def classification | [passes/gate-def-classification.md](passes/gate-def-classification.md) |

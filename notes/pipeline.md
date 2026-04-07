@@ -43,8 +43,9 @@ evaluation order or duplicate effects.
 
 ### Closure conversion eliminates free variables (§1.4, p. 9; Ch 10)
 The closure-conversion phase produces a CPS expression where every function is
-closed (no free variables). This is required before emitting flat target code
-like OpenQASM, where there is no notion of lexical scope.
+closed (no free variables). This is required for the fully closed backend path,
+even though the current OpenQASM emitter still reads the earlier
+interface-flattened CPS.
 
 ---
 
@@ -136,8 +137,10 @@ eliminated or compiled to a `while` loop. See
 
 ## Compilation Pipeline
 
-Stages 1–6 are backend-neutral middle-end passes. Stages 7–11 are
-backend-facing.
+The current pipeline intentionally interleaves backend-neutral normalization
+with a few OpenQASM-driven passes. In particular, gate/def classification runs
+early on the interface-flattened CPS so it can inspect clean callable
+interfaces before closure conversion adds records and indirect calls.
 
 ### 1. Parse + scope resolve **[done]**
 
@@ -195,22 +198,25 @@ lists and matching `CApp` argument lists when the shape is fully scalar. Handles
 cross-declaration continuation-result flow so tuple outputs flatten across
 declaration boundaries.
 
-**Gate/def classification (`GateDef.hs`):** classifies each top-level
-declaration as `gate` (pure unitary) or `def` (contains measurement or
-classical control). Runs here so it sees the clean pre-closure interfaces.
+See [passes/record-flattening.md](passes/record-flattening.md).
 
-See [passes/record-flattening.md](passes/record-flattening.md) and
-[passes/gate-def-classification.md](passes/gate-def-classification.md).
+### 6. Gate/def classification **[done]**
 
-### 6. Closure conversion **[done]** (Appel Ch 10)
+Classifies each top-level declaration as `gate` (pure unitary) or `def`
+(contains measurement or classical control). Runs here so it sees the clean
+pre-closure interfaces rather than closure records and dispatch scaffolding.
+
+Module: `GateDef.hs` — see [passes/gate-def-classification.md](passes/gate-def-classification.md)
+
+### 7. Closure conversion **[done]** (Appel Ch 10)
 
 Eliminates all free variables. Every `CFix`-bound function becomes a closed
 value; its free variables are bundled into an explicit closure record. After
 this pass the program is one flat top-level `CFix` with no nested scopes.
 
-Module: `ClosureConv.hs` — see [appel/ch10-closure-conversion.md](appel/ch10-closure-conversion.md)
+Module: `ClosureConv.hs` — see [passes/closure-conversion.md](passes/closure-conversion.md) and [appel/ch10-closure-conversion.md](appel/ch10-closure-conversion.md)
 
-### 7. Defunctionalization **[done]**
+### 8. Defunctionalization **[done]**
 
 OpenQASM has no function values. After closure conversion, closures are still
 first-class data. Defunctionalization converts all remaining higher-order
@@ -218,7 +224,7 @@ functions into integer tags + a top-level dispatch function.
 
 Module: `Defunc.hs` — see [passes/defunctionalization.md](passes/defunctionalization.md)
 
-### 8. Qubit hoisting **[done]**
+### 9. Qubit hoisting **[done]**
 
 OpenQASM requires all qubit declarations at top-level scope. This pass assigns
 each `init` a static slot index, replaces the dynamic `PRIMOP(init, ...)` with
@@ -226,7 +232,7 @@ each `init` a static slot index, replaces the dynamic `PRIMOP(init, ...)` with
 
 Module: `QubitHoist.hs` — see [passes/qubit-hoisting.md](passes/qubit-hoisting.md)
 
-### 9. Local record flattening **[done]**
+### 10. Local record flattening **[done]**
 
 Removes record traffic that remains within a single CPS expression after the
 earlier interface-flattening pass. Closure-conversion and defunctionalization
@@ -234,10 +240,10 @@ records remain conservative.
 
 Module: `RecordFlatten.hs` — see [passes/record-flattening.md](passes/record-flattening.md)
 
-### 10. OpenQASM emission **[done — first cut]**
+### 11. OpenQASM emission **[done — first cut]**
 
-Entrypoint-driven structural translation from the flat, closed, recursion-free
-CPS. Starts from `output`, inlines reachable top-level calls, emits one flat
+Entrypoint-driven structural translation from the interface-flattened CPS.
+Starts from `output`, inlines reachable top-level calls, and emits one flat
 OpenQASM program.
 
 | CPS | OpenQASM |
@@ -288,7 +294,7 @@ inlined at more than one use site.
 | Classical | Quantum (FunQ) |
 |---|---|
 | Free to copy/discard variables | Qubits are **linear** — used exactly once |
-| Closure conversion is an optimization | Closure conversion is **required** before emit |
+| Closure conversion is an optimization | FunQ keeps a required closed-CPS path, though today's emitter still reads earlier interface-flattened CPS |
 | Function values survive to emit | **No function values in OpenQASM** — defunctionalization required |
 | Recursion allowed at runtime | **No runtime recursion** — tail loops → `while`; others rejected |
 | No qubit allocation constraints | All qubits must be **hoisted to top-level scope** |
