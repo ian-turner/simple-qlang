@@ -98,6 +98,10 @@ tracked in [../future/backend-refactor.md](../future/backend-refactor.md).
 recursive call passes the outer continuation unchanged (directly or via
 η-trivial chains). If so, the function emits as an OpenQASM `while` loop.
 
+This recognition currently lives in `OpenQASM.hs`, not in a separate earlier
+normalization pass. It assumes the well-formed continuation shapes produced by
+`ToCPS.hs`.
+
 Otherwise the emitter falls back to guarded inline expansion with a 1000-call
 depth limit. A compile-time error is raised if the limit is reached.
 
@@ -111,7 +115,13 @@ This is a first-cut emitter, not the final backend architecture:
 
 - Does not emit reusable OpenQASM `gate`/`def` declarations — helpers are
   always inlined from `output`. Repeated helper use duplicates code.
+- Callable kinds are computed earlier for analysis/debugging, but the emitter
+  does not yet consume them to choose between reusable OpenQASM `gate` and
+  `def` declarations.
 - Bounded list recursion is still handled by budget-unrolling rather than
   explicit loop IR. See [../future/bounded-recursion.md](../future/bounded-recursion.md).
+- `CFor` and `VQubitArr` exist in the IR as scaffolding for planned bounded-
+  recursion lowering. If a `CFor` node reaches `runExp` today, emission fails
+  immediately with an unsupported-feature error.
 - The `output` continuation is intercepted directly rather than relying on the
   final tiny local halt wrapper.

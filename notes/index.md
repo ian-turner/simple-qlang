@@ -44,7 +44,7 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 | `CPSExp.hs` | CPS IR datatype (`CExp`, `Value`, `AccessPath`) |
 | `ToCPS.hs` | CPS conversion: `LExp` → `CExp` (Appel Ch 5) |
 | `RecElim.hs` | Rejects mutual recursion in multi-function CFix groups; self-recursion passes through |
-| `BoundedRecursion.hs` | Recognizes tail-loop-eligible self-recursive declarations |
+| `BoundedRecursion.hs` | Top-level recursion helpers; exposes `extractTopLevelFunction` for the emitter and counted-recursion scaffolding for future lowering |
 | `RecordShape.hs` | Whole-module tuple/data-flow record-shape analysis |
 | `ModuleRecordFlatten.hs` | Interprocedural interface flattening before closure conversion |
 | `CPSAtom.hs` | Shared atom/environment helpers |
@@ -55,7 +55,7 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 | `Defunc.hs` | Defunctionalization: replaces runtime code pointers with tags and dispatch |
 | `QubitHoist.hs` | Hoists `init` to static qubit slots |
 | `RecordFlatten.hs` | Local record simplification after qubit hoisting |
-| `StaticShape.hs` | Whole-module list-size / aggregate shape inference |
+| `StaticShape.hs` | Whole-module list-size / aggregate shape inference scaffold; not currently wired into `CompilePipeline.hs` |
 | `Main.hs` | Entry point: parses CLI args, calls `compileModule`, prints OpenQASM, and can dump intermediate IR with `--debug` |
 
 ---
@@ -67,7 +67,7 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 | 1 | Parse + scope resolve | `Parser.hs`, `Resolve.hs` | done |
 | 2 | Lower to Lambda IR | `Lower.hs` | done |
 | 3 | CPS conversion | `ToCPS.hs` | done |
-| 4 | Recursion check / tail-loop recognition | `RecElim.hs`, `BoundedRecursion.hs`, `CompilePipeline.hs` | done |
+| 4 | Recursion checks + emitter-side tail-loop compilation | `RecElim.hs`, `CompilePipeline.hs`, `BoundedRecursion.hs`, `OpenQASM.hs` | done (first cut) |
 | 5 | Record-shape analysis + interface flattening | `RecordShape.hs`, `ModuleRecordFlatten.hs` | done |
 | 6 | Gate/def classification | `GateDef.hs` | done |
 | 7 | Closure conversion | `ClosureConv.hs` | done |
@@ -75,7 +75,7 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 | 9 | Qubit hoisting | `QubitHoist.hs` | done |
 | 10 | Local record flattening | `RecordFlatten.hs` | done |
 | 11 | OpenQASM emission | `OpenQASM.hs` | done (first cut) |
-| — | Static list erasure + bounded recursion IR | planned | see [future/bounded-recursion.md](future/bounded-recursion.md) |
+| — | Static list erasure + bounded recursion IR | planned (`StaticShape.hs`, `CFor`, and `VQubitArr` scaffolding exist; end-to-end wiring is still pending) | see [future/bounded-recursion.md](future/bounded-recursion.md) |
 | — | CPS optimizations (β, η, inlining, CSE) | deferred | Appel Ch 6–9 |
 | — | Linear type checking | deferred | assumes well-typed input |
 

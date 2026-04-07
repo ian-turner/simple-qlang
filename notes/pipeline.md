@@ -167,22 +167,28 @@ becomes `APP(c, [v])`. Measurement becomes a single-result `PRIMOP`.
 
 Modules: `ToCPS.hs` — see [passes/cps-conversion.md](passes/cps-conversion.md)
 
-### 4. Recursion check + tail-loop recognition **[done]**
+### 4. Recursion checks + emitter-side tail-loop compilation **[done — first cut]**
 
-Two sub-passes run in sequence:
+Three pieces participate in the current recursion story:
 
 **Local CFix check (`RecElim.hs`):** rejects mutual recursion in any
 multi-function `CFix` group. Single-function self-recursion passes through.
 
 **Top-level label check (`CompilePipeline.hs`):** builds a call graph over
-compiled declarations; marks every declaration in a cyclic SCC as a recursion
-error.
+compiled declarations; marks declarations in cyclic SCCs of size greater than
+1 as recursion errors. A single self-recursive top-level declaration is
+allowed through so the backend can decide whether it is a tail loop or must be
+handled by inline expansion.
 
-**Tail-loop recognition (`BoundedRecursion.hs`):** identifies self-recursive
-declarations where every recursive call passes the outer continuation unchanged.
-These become `while` loops at emission time (`isTailLoop` in `OpenQASM.hs`).
-All other self-recursive declarations fall back to guarded inline expansion with
-a 1000-call depth limit.
+**Emitter-side tail-loop recognition (`OpenQASM.hs`):** `isTailLoop`
+identifies self-recursive declarations where every recursive call passes the
+outer continuation unchanged. These become `while` loops at emission time. All
+other self-recursive declarations fall back to guarded inline expansion with a
+1000-call depth limit.
+
+`BoundedRecursion.hs` currently provides `extractTopLevelFunction`, which the
+emitter uses to inspect top-level recursive callables, plus counted-recursion
+recognition scaffolding that is not yet wired into `CompilePipeline.hs`.
 
 See [passes/recursion.md](passes/recursion.md).
 
@@ -261,11 +267,14 @@ Module: `OpenQASM.hs` — see [passes/openqasm-emission.md](passes/openqasm-emis
 
 For recursive programs that operate on statically-sized lists (`ghz.funq`,
 `qft_n.funq` with dynamic n), a future pass should:
-- infer finite list shapes via `StaticShape.hs`
-- lower bounded recursion into explicit loop IR
+- wire in the existing `StaticShape.hs` analysis over Lambda IR
+- lower bounded recursion into explicit loop IR (`CFor`, already present in
+  `CPSExp.hs` but not yet produced by the normal pipeline)
 - erase statically-sized `List` values into fixed records/tuples
 
-Currently handled by budget-unrolling in the emitter. See
+If a `CFor` node reaches the current emitter, emission fails immediately;
+today's shipped path still handles these programs by budget-unrolling in the
+emitter. See
 [future/bounded-recursion.md](future/bounded-recursion.md).
 
 ---
@@ -296,7 +305,7 @@ inlined at more than one use site.
 | Free to copy/discard variables | Qubits are **linear** — used exactly once |
 | Closure conversion is an optimization | FunQ keeps a required closed-CPS path, though today's emitter still reads earlier interface-flattened CPS |
 | Function values survive to emit | **No function values in OpenQASM** — defunctionalization required |
-| Recursion allowed at runtime | **No runtime recursion** — tail loops → `while`; others rejected |
+| Recursion allowed at runtime | **No runtime recursion** — tail loops → `while`; other self-recursive shapes currently rely on guarded inline expansion or are rejected earlier |
 | No qubit allocation constraints | All qubits must be **hoisted to top-level scope** |
 | Tuples are a natural IR construct | **No tuple type** — must flatten before emit |
 

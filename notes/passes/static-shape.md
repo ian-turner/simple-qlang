@@ -1,7 +1,9 @@
 # Static Shape Analysis (`StaticShape.hs`)
 
 Infers list sizes and aggregate shapes for all top-level bindings.
-Runs after CPS conversion and before bounded recursion lowering (pipeline steps 3 → 4).
+The implementation operates on top-level Lambda IR (`LExp`) after lowering.
+It is not currently wired into `CompilePipeline.hs`; the intended consumer is
+the planned bounded-recursion / static-list-erasure work.
 
 ---
 
@@ -9,7 +11,8 @@ Runs after CPS conversion and before bounded recursion lowering (pipeline steps 
 
 Bounded recursion lowering needs to know, at each call site, whether the
 argument to a list-recursive function has a statically determinable size.
-`StaticShape` computes that information in a whole-module fixed-point pass.
+`StaticShape` computes that information in a whole-module fixed-point pass over
+Lambda IR.
 
 ---
 
@@ -114,9 +117,9 @@ init_n 4 → ShapeList (SizeKnown 4) ShapeQubit
   list construction with size arithmetic.  `ghz_4` and `qft_n 4` resolve to
   `ShapeUnknown` in the current pass.
 
-These are acceptable for step 3.  Bounded recursion lowering (step 4) will
-use concrete shapes where available and report errors for `SizeUnknown` cases
-that involve qubit allocation.
+These are acceptable for the current scaffold. Future bounded-recursion
+lowering can use concrete shapes where available and report errors for
+`SizeUnknown` cases that involve qubit allocation.
 
 ---
 
@@ -130,4 +133,5 @@ listSize             :: Shape -> Maybe Size
 ```
 
 `analyzeModuleShapes` takes `(name, lambdaIR)` pairs from the pipeline's
-`compiledLambdaIR` fields.  Pipeline wiring is deferred to step 8.
+`compiledLambdaIR` fields. The normal compile pipeline does not currently call
+it, so the analysis does not appear in backend behavior or `--debug` output.

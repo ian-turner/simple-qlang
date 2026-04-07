@@ -23,8 +23,9 @@ FunQ looks like a small ML-family language. It has:
   classically-controlled gates are expressible directly
 - **Pattern matching** — tuples, ADTs, wildcards
 - **Algebraic data types** — `data` declarations with constructors
-- **Recursion** — local recursive `fix` groups are rejected; a bounded top-level
-  self-recursive subset is supported by backend unrolling
+- **Recursion** — local recursive `fix` groups are rejected; self-recursive
+  top-level tail loops compile to OpenQASM `while`, and other self-recursive
+  cases currently rely on guarded backend inline expansion
 
 ### Built-in types
 
@@ -113,7 +114,7 @@ src/
   CPSExp.hs             — CPS IR datatype (CExp, Value); Appel §2.1
   ToCPS.hs              — CPS conversion pass (LambdaIR -> CPSExp); Appel Ch 5
   RecElim.hs            — recursion check: rejects recursive local CFix groups
-  BoundedRecursion.hs   — recognizes bounded top-level self-recursive functions
+  BoundedRecursion.hs   — top-level function helpers for recursion handling; counted-recursion scaffolding for planned bounded-recursion lowering
   RecordShape.hs        — whole-module record-shape inference
   ModuleRecordFlatten.hs — interface record flattening before closure conversion
   GateDef.hs            — conservative gate/def classification
@@ -121,6 +122,7 @@ src/
   Defunc.hs             — defunctionalization pass (CPSExp -> CPSExp)
   QubitHoist.hs         — static qubit-slot assignment after defunctionalization
   RecordFlatten.hs      — local record cleanup after qubit hoisting
+  StaticShape.hs        — whole-module list-size / aggregate shape analysis scaffold (not yet wired into CompilePipeline)
   CompilePipeline.hs    — module-level compilation orchestration
   OpenQASM.hs           — OpenQASM 3.0 emitter (entrypoint-driven)
   TopMonad.hs           — top-level compilation monad
@@ -175,7 +177,8 @@ changes by building and running representative examples.
 | Qubit hoisting | Done |
 | Tuple/record flattening | Done (interface + local) |
 | Gate/def classification | Done (conservative first pass) |
-| Bounded recursion (unroll) | Done (first cut) |
+| Recursion handling | Done (first cut: single self-recursive top-level declarations are allowed through; tail loops emit as `while`, others use guarded inline expansion) |
+| Static shape analysis | Implemented, not yet wired into `CompilePipeline.hs` |
 | Register spilling | Deferred |
 | OpenQASM emission | Done (first cut; inlines from `output`, emits output arrays for homogeneous results, and renders boolean two-arm branches as `if/else`) |
 

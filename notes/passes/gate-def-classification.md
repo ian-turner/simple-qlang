@@ -13,8 +13,9 @@ OpenQASM distinguishes two kinds of subroutine:
 - **`def`**: subroutine with measurement or classical control
 
 The classification pass analyzes the interface-flattened CPS for each top-level
-declaration and assigns it `Gate` or `Def`. This information is used by the
-emitter.
+declaration and assigns it `Gate` or `Def`. Today this information is carried in
+`CompiledModule` and shown in `--debug` output; the first-cut emitter does not
+yet consume it to emit reusable OpenQASM `gate`/`def` declarations.
 
 ---
 
@@ -55,6 +56,8 @@ This is not yet the final backend-facing classification:
 - Does not classify every closed internal helper produced by later stages
 - Calls through higher-order parameters are treated conservatively-neutral
   rather than being classified from actual call sites
+- The first-cut emitter still inlines from `output`, so callable kinds are
+  currently analysis/debug metadata rather than a direct emission control path
 
 That tradeoff is deliberate: it gives a stable notion of top-level `gate` vs
 `def` without requiring full call-site analysis.

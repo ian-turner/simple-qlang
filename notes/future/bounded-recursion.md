@@ -13,6 +13,11 @@ covers current examples like `ghz.funq` and `qft_n.funq` but is fragile because
 recursive ADT semantics are split across CPS lowering, interface flattening, and
 emitter-side `ValueRep` reconstruction.
 
+Scaffolding for the planned replacement already exists in the codebase:
+`CFor`, `VQubitArr`, structural traversal cases in downstream passes, and
+`StaticShape.hs`. What is still missing is end-to-end pipeline wiring,
+`CFor`-producing lowering, and emitter support.
+
 **Correctness gap:** the Class 3 case (dynamic trip count + qubit accumulation,
 e.g. `init_n x` where `x` is a runtime variable) falls into the 1000-call
 budget rather than failing early with a clear error. This is a soundness concern

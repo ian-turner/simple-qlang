@@ -68,8 +68,8 @@ intersection means at least one function calls another (or itself) in the group.
 - **Multi-function groups** with any recursion are **rejected** (mutual
   recursion is not supported).
 - **Single-function groups** with self-recursion **pass through** — the
-  self-recursive declaration proceeds to `BoundedRecursion.hs` for tail-loop
-  classification, and ultimately to the emitter.
+  self-recursive declaration proceeds to the top-level label check and
+  ultimately to the emitter.
 
 ---
 
@@ -80,24 +80,30 @@ After per-declaration CPS lowering and the local recursion check,
 
 - Collects top-level `VLabel` callees from each declaration's CPS
 - Builds a call graph over compiled declarations
-- Marks every declaration in a cyclic strongly-connected component as a
-  recursion error
+- Marks declarations in cyclic strongly-connected components of size greater
+  than 1 as recursion errors
 
-This catches cases where top-level declarations form recursive label cycles
-(`init_n -> init_n`, or mutual recursion across declarations). Such cycles
+This catches mutual top-level label cycles across declarations. Those cycles
 would otherwise reach interface flattening, classification, and the emitter.
 
-Exceptions: declarations recognized by `BoundedRecursion.hs` as tail loops are
-allowed through.
+A single self-recursive top-level declaration is intentionally allowed through.
+The backend later decides whether it is a tail loop (`while`) or must fall back
+to guarded inline expansion.
 
 ---
 
-## 3. Tail-loop recognition and `while` compilation (`BoundedRecursion.hs` + `OpenQASM.hs`)
+## 3. Emitter-side tail-loop recognition and `while` compilation (`BoundedRecursion.hs` + `OpenQASM.hs`)
 
-**Recognition (`BoundedRecursion.hs`):** identifies self-recursive declarations
-where every recursive call passes the outer continuation unchanged — either
-directly or via η-trivial chains (including Appel's curried-application
-intermediates). These are tail loops (Class 2 candidates).
+**Helper extraction (`BoundedRecursion.hs`):** currently provides
+`extractTopLevelFunction`, which lets the emitter inspect a top-level
+self-recursive declaration as a parameter list plus body. The same module also
+contains counted-recursion recognizers for planned `CFor`-based lowering, but
+those are not yet wired into `CompilePipeline.hs`.
+
+**Recognition (`isTailLoop` in `OpenQASM.hs`):** identifies self-recursive
+declarations where every recursive call passes the outer continuation unchanged
+— either directly or via η-trivial chains (including Appel's curried-
+application intermediates). These are tail loops (Class 2 candidates).
 
 **Class 2 qubit-neutrality is already enforced by `isTailLoop`:** a function
 that accumulates qubits across iterations must build a new continuation that
@@ -105,6 +111,10 @@ captures newly allocated qubits (e.g. `init_n` builds a growing `Cons` chain).
 This modifies the continuation, causing `isTailLoop` to return `False`. Under the
 linear-typing assumption, a function that passes `isTailLoop = True` cannot
 accumulate qubits. No additional while-loop qubit-neutrality check is required.
+
+`isTailLoop` is a structural check over the emitted CPS shape. It assumes the
+well-formed continuation patterns produced by `ToCPS.hs`; it is not a separate
+typed proof of qubit-neutrality.
 
 **Class 3 early rejection (planned):** the outstanding work is detecting the case
 where a qubit-accumulating recursive function is called with a runtime-variable

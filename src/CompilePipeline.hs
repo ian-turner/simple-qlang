@@ -110,8 +110,9 @@ applyTopLevelRecursionCheck items =
     unsupportedNames = Set.fromList (concatMap unsupportedGroupNames groups)
 
     unsupportedGroupNames [_] =
-      -- Single self-recursive top-level function: allowed. The OpenQASM backend
-      -- compiles self-recursive CallableTopLevel functions as while loops.
+      -- Single self-recursive top-level function: allowed through. The backend
+      -- later decides whether it is a tail loop (emit as `while`) or falls back
+      -- to guarded inline expansion.
       []
     unsupportedGroupNames names =
       -- Mutual top-level recursion is not yet supported.
