@@ -6,7 +6,7 @@ repo-root `resources/` directory.
 
 Current focus:
 - Appel chapter notes live in [appel/index.md](appel/index.md)
-- Standalone paper notes so far: [kelsey-ssa-cps.md](kelsey-ssa-cps.md), [maurer-compiling-without-continuations.md](maurer-compiling-without-continuations.md), [kennedy-compiling-with-continuations-continued.md](kennedy-compiling-with-continuations-continued.md)
+- Standalone paper notes so far: [kelsey-ssa-cps.md](kelsey-ssa-cps.md), [maurer-compiling-without-continuations.md](maurer-compiling-without-continuations.md), [kennedy-compiling-with-continuations-continued.md](kennedy-compiling-with-continuations-continued.md), [cong-whatever.md](cong-whatever.md), [leijen-lorenzen-trmc.md](leijen-lorenzen-trmc.md), [allain-bour-clement-pottier-scherer-tmc-ocaml.md](allain-bour-clement-pottier-scherer-tmc-ocaml.md), [peyton-jones-specconstr.md](peyton-jones-specconstr.md), [ohori-sasano-fixed-point-promotion.md](ohori-sasano-fixed-point-promotion.md)
 
 Downloaded PDFs live in the repo-root `resources/` directory (git-ignored). The
 download manifest is `resources/papers.txt`, read by `scripts/get_papers.sh`.
@@ -21,11 +21,11 @@ download manifest is `resources/papers.txt`, read by `scripts/get_papers.sh`.
 | Kelsey, *A Correspondence between CPS and SSA* | `resources/kelsey-ssa-cps.pdf` | Most direct guide for treating join continuations as backend blocks | started | [kelsey-ssa-cps.md](kelsey-ssa-cps.md) |
 | Maurer et al., *Compiling without Continuations* | `resources/maurer-compiling-without-continuations.pdf` | Join points as explicit, second-class control nodes | started | [maurer-compiling-without-continuations.md](maurer-compiling-without-continuations.md) |
 | Kennedy, *Compiling with Continuations, Continued* | `resources/kennedy-compiling-with-continuations-continued.pdf` | Contification and staged CPS backend improvement | started | [kennedy-compiling-with-continuations-continued.md](kennedy-compiling-with-continuations-continued.md) |
-| Cong et al., *Compiling with Continuations, or without? Whatever.* | `resources/cong-whatever.pdf` | Design-space survey for an incremental backend refactor | not started | — |
-| Leijen and Lorenzen, *Tail recursion modulo context* | `resources/leijen-lorenzen-trmc.pdf` | Primary bounded-recursion reference for turning structural recursion into loops | not started | — |
-| Allain et al., *Tail Modulo Cons, OCaml, and Relational Separation Logic* | `resources/allain-bour-clement-pottier-scherer-tmc-ocaml.pdf` | Production-compiler reference for list-building recursion | not started | — |
-| Peyton Jones, *Call-pattern Specialisation for Haskell Programs* | `resources/peyton-jones-specconstr.pdf` | Static boundedness and recursive specialization | not started | — |
-| Ohori and Sasano, *Lightweight Fusion by Fixed Point Promotion* | `resources/ohori-sasano-fixed-point-promotion.pdf` | Recursive fusion / fixed-point rewriting reference | not started | — |
+| Cong et al., *Compiling with Continuations, or without? Whatever.* | `resources/cong-whatever.pdf` | Design-space survey for an incremental backend refactor | started | [cong-whatever.md](cong-whatever.md) |
+| Leijen and Lorenzen, *Tail recursion modulo context* | `resources/leijen-lorenzen-trmc.pdf` | Primary bounded-recursion reference for turning structural recursion into loops | started | [leijen-lorenzen-trmc.md](leijen-lorenzen-trmc.md) |
+| Allain et al., *Tail Modulo Cons, OCaml, and Relational Separation Logic* | `resources/allain-bour-clement-pottier-scherer-tmc-ocaml.pdf` | Production-compiler reference for list-building recursion | started | [allain-bour-clement-pottier-scherer-tmc-ocaml.md](allain-bour-clement-pottier-scherer-tmc-ocaml.md) |
+| Peyton Jones, *Call-pattern Specialisation for Haskell Programs* | `resources/peyton-jones-specconstr.pdf` | Static boundedness and recursive specialization | started | [peyton-jones-specconstr.md](peyton-jones-specconstr.md) |
+| Ohori and Sasano, *Lightweight Fusion by Fixed Point Promotion* | `resources/ohori-sasano-fixed-point-promotion.pdf` | Recursive fusion / fixed-point rewriting reference | started | [ohori-sasano-fixed-point-promotion.md](ohori-sasano-fixed-point-promotion.md) |
 
 ---
 

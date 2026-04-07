@@ -1,6 +1,6 @@
 # Bounded Recursion Lowering — Future Plan
 
-See also: [../passes/recursion.md](../passes/recursion.md), [../pipeline.md](../pipeline.md)
+See also: [../passes/recursion.md](../passes/recursion.md), [../pipeline.md](../pipeline.md), [../resources/leijen-lorenzen-trmc.md](../resources/leijen-lorenzen-trmc.md), [../resources/ohori-sasano-fixed-point-promotion.md](../resources/ohori-sasano-fixed-point-promotion.md)
 
 ---
 
@@ -47,6 +47,11 @@ Example: `countdown_zero 3` should reduce to `True`; emitting a runtime `while`
 loop is correct but unnecessarily low-level. More generally, classical helper
 recursion that only computes constants, indices, loop bounds, or dead control
 flow should disappear during compilation.
+
+This bucket also includes recursive producer/consumer pairs whose intermediate
+aggregate can be removed by upstream normalization such as fixed-point
+promotion. That is still a "simplify it away before loop lowering" move, not a
+backend control-flow transformation.
 
 This is not a backend concern. It should be handled by a dedicated classical
 partial-evaluation / constant-propagation pass that runs before bounded
@@ -111,6 +116,14 @@ express, but it does not remove the need for:
 - shape inference for list sizes,
 - structural recursion recognition, and
 - early rejection of unsupported recursive programs.
+
+Leijen and Lorenzen's TRMC paper is useful here as a **recognition** reference:
+it shows how recursive calls under constructors or algebraic residual contexts
+can be normalized into tail-recursive workers with explicit carried state.
+However, it is not a substitute for `CFor` in FunQ. Tail-recursive workers still
+hide output size in an accumulator/context unless we recover a static bound and
+erase the aggregate shape before emission. For FunQ, TRMC is upstream guidance
+for exposing loop-carried state, not the final backend representation.
 
 So a CFG backend should be treated as an optional downstream simplification, not
 as the prerequisite for fixing recursion. The hard part for `ghz` and `qft_n`

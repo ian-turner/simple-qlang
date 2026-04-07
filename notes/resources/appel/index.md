@@ -91,8 +91,9 @@ emission path.
 |---|---|---|
 | 1 | Read | [ch01-overview.md](ch01-overview.md) |
 | 2 | Read | [ch02-cps-datatype.md](ch02-cps-datatype.md) |
+| 3 | Read | [ch03-cps-semantics.md](ch03-cps-semantics.md) |
 | 4 | Read | [ch04-lambda-language.md](ch04-lambda-language.md) |
 | 5 | Read | [ch05-cps-conversion.md](ch05-cps-conversion.md) |
 | 10 | Read | [ch10-closure-conversion.md](ch10-closure-conversion.md) |
 | 11 | Read | [ch11-register-spilling.md](ch11-register-spilling.md) |
-| 3, 6–9, 12–18 | Not started | — |
+| 6–9, 12–18 | Not started | — |
