@@ -27,8 +27,11 @@ while IFS='|' read -r raw_filename raw_title raw_url; do
 
   echo "Downloading: $title"
   if ! wget -O "$OUTPUT_DIR/$filename" "$url"; then
-    echo "download failed: $title" >&2
-    failures=$((failures + 1))
+    echo "wget failed for: $title; retrying with curl" >&2
+    if ! curl -L -f -o "$OUTPUT_DIR/$filename" "$url"; then
+      echo "download failed: $title" >&2
+      failures=$((failures + 1))
+    fi
   fi
 done < "$MANIFEST"
 

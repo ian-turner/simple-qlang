@@ -3,3 +3,7 @@ kelsey-ssa-cps.pdf | Richard Kelsey - A Correspondence between Continuation Pass
 kennedy-compiling-with-continuations-continued.pdf | Andrew Kennedy - Compiling with Continuations, Continued | https://www.ccs.neu.edu/home/shivers/cs6983/papers/compilingwithcontinuationscontinued.pdf
 maurer-compiling-without-continuations.pdf | Luke Maurer et al. - Compiling without Continuations | https://simon.peytonjones.org/assets/pdfs/compiling-without-continuations.pdf
 cong-whatever.pdf | Youyou Cong et al. - Compiling with Continuations, or without? Whatever. | https://www.cs.purdue.edu/homes/rompf/papers/cong-icfp19.pdf
+leijen-lorenzen-trmc.pdf | Daan Leijen and Anton Felix Lorenzen - Tail recursion modulo context: An equational approach (extended version) | https://www.cambridge.org/core/services/aop-cambridge-core/content/view/CCFFA4B8583A4924F002B0C377394303/S0956796825100117a.pdf/tail-recursion-modulo-context-an-equational-approach-extended-version.pdf
+allain-bour-clement-pottier-scherer-tmc-ocaml.pdf | Clement Allain et al. - Tail Modulo Cons, OCaml, and Relational Separation Logic | https://zenodo.org/records/14103793/files/preprint.pdf?download=1
+peyton-jones-specconstr.pdf | Simon Peyton Jones - Call-pattern Specialisation for Haskell Programs | https://www.microsoft.com/en-us/research/wp-content/uploads/2016/07/spec-constr.pdf
+ohori-sasano-fixed-point-promotion.pdf | Atsushi Ohori and Isao Sasano - Lightweight Fusion by Fixed Point Promotion | https://www.cs.ise.shibaura-it.ac.jp/~sasano/pub/OhoriSasanoPOPL07.pdf
