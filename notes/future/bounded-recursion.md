@@ -93,6 +93,35 @@ count is not statically bounded.
 
 ---
 
+## Reading-based refinement
+
+Recent reading narrowed the role of each paper in this work:
+
+- **TRMC / TMC** are the main references for recognizing structural recursion
+  whose recursive calls sit under residual constructor or algebraic context.
+  They help expose loop-carried state; they are not the final backend
+  representation.
+- **SpecConstr** suggests a small upstream specialization step for recursive
+  helpers whose state is obscured by known constructor shapes. This is best
+  treated as a simplification pass before legality classification, not as a
+  replacement for shape inference.
+- **Fixed-point promotion** suggests a conservative producer/consumer fusion
+  step for classical recursive plumbing before CPS conversion, again as an
+  upstream simplifier rather than a loop-lowering mechanism.
+
+The resulting picture is:
+- simplify recursive state first when it is obviously removable
+- expose residual post-recursive work as explicit carried state
+- recover a static iteration space where possible
+- then lower to `CFor`, `while`, or a compile-time error
+
+This reinforced one architectural point: a CFG / explicit-join backend may help
+express loops later, but it is not the prerequisite for fixing `ghz`, `qft_n`,
+or other bounded-recursion cases. The hard part is recovering bounded
+iteration, not merely changing the final control representation.
+
+---
+
 ## Architecture decision: `CFor` IR node, not unrolling
 
 The chosen approach is to add a `CFor` constructor to `CPSExp.hs` and thread it
@@ -199,6 +228,28 @@ the only way to accumulate qubits across iterations — already fails `isTailLoo
 and never reaches the while-loop path. No additional while-loop check is needed
 under the linear-typing assumption.
 
+### 0.5. Optional upstream normalization on `LambdaIR`
+
+Before bounded-recursion lowering proper, the most promising new reading-driven
+extensions are small direct-style normalization passes:
+
+- **Shape-driven recursive specialization** for first-order self-recursive
+  helpers whose recursive arguments are already known constructor forms and are
+  immediately scrutinized again.
+- **Recursive producer/consumer fusion** for visible local classical functions
+  where a recursive producer feeds a strict recursive consumer and the
+  intermediate aggregate is purely structural.
+
+These are intentionally optional and conservative. They should:
+- run before CPS conversion, where recursive shape is still explicit
+- initially target classical-only code
+- treat failure as "do nothing"
+- feed simpler workers into the later shape-inference / bounded-recursion pass
+
+They are best understood as Bucket 0 enablers: they may eliminate recursion
+entirely or expose a simpler bounded traversal, but they do not replace static
+shape inference or `CFor` lowering.
+
 ### 1. Static shape inference (`src/StaticShape.hs`)
 
 Infer finite list lengths and aggregate shapes from top-level bindings:
@@ -236,6 +287,15 @@ qubit-allocation loops like `init_n`. The IR faithfully represents the loop
 even when the only operation is `PInit`. It is QubitHoist (not this pass) that
 decides what the loop means at emission time — stripping `PInit` for OpenQASM,
 or emitting dynamic allocation for QIR.
+
+Recommended landing order:
+1. Close the existing Class 3 correctness gap with early rejection.
+2. Wire `StaticShape.hs` into the normal pipeline and extend it for the current
+   missing multi-argument / composite cases.
+3. Add the first bounded-recursion lowering path for counted and same-shape
+   structural traversals, targeting `CFor`.
+4. Add optional upstream specialization/fusion only where it simplifies real
+   examples and preserves effect order without extra machinery.
 
 Proposed CPS extension (`src/CPSExp.hs`):
 

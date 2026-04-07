@@ -57,3 +57,28 @@ interfaces. After closure conversion, nearly everything has extra records and
 indirect calls that would collapse the `gate` class.
 
 See [passes/gate-def-classification.md](passes/gate-def-classification.md).
+
+## Separate recursion normalization from backend join lowering
+
+Recent paper reading clarified that the remaining recursion work and the
+`if/else` join cleanup are related but should not be treated as one refactor.
+
+- **Bounded recursion** is primarily an upstream normalization/classification
+  problem: expose loop-carried state, recover static bounds, then classify each
+  recursive program as compile-time evaluation, static `for`, dynamic `while`,
+  or rejection.
+- **Branch joining** is primarily an emitter/control-flow problem: lower named
+  local continuations as backend joins/blocks instead of recovering shared tails
+  with suffix hoisting.
+
+This means recursion lowering does **not** depend on first building a CFG/SSA
+backend. A more explicit join/block backend may make later control lowering
+cleaner, but it does not replace the need for:
+- static shape inference
+- early rejection of dynamic qubit-growing recursion
+- TRMC/TMC-style recognition of residual recursive context
+- explicit `CFor` lowering for statically bounded recursion
+
+Conversely, explicit join handling should be landed as a focused emitter change
+without waiting for bounded-recursion work. The current CPS IR already contains
+the right `LSwitch` join-continuation shape.

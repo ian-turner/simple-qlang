@@ -21,6 +21,28 @@ Refactor target:
 
 ---
 
+## Scope boundary
+
+Recent reading made the scope boundary clearer:
+
+- This note is about **backend join lowering**, not about solving bounded
+  recursion in general.
+- The immediate task is to stop compiling `LSwitch` join continuations as if
+  they were ordinary callable functions and stop relying on
+  `splitCommonSuffix` as the primary branch-merge mechanism.
+
+This work should be staged independently from bounded-recursion lowering.
+Improving join handling may make later control emission cleaner, but it does not
+eliminate the separate need for:
+- static shape inference
+- TRMC/TMC-style recognition of residual recursive context
+- explicit `CFor` lowering for statically bounded recursion
+- early rejection of dynamic qubit-growing recursion
+
+Conversely, those recursion fixes should not wait for a CFG/SSA backend.
+
+---
+
 ## Papers and where they fit
 
 ### 1. `resources/kelsey-ssa-cps.pdf`
@@ -130,3 +152,10 @@ the emitter:
 - Teach the emitter to recognize join-continuation calls as branch exits
 - Do not attempt a whole-backend replacement in the same pass
 - Keep current emitter behavior available for unsupported shapes
+
+The specific near-term target is:
+- branch-local `CFix` continuations from `LSwitch`
+- explicit join parameters as branch-exit values
+- one shared continuation body emitted after the branch
+
+This is a focused emitter cleanup, not a prerequisite for the recursion plan.
