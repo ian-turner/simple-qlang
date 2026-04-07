@@ -30,8 +30,9 @@ notes/
 ├── future/                   — planned work not yet implemented
 │   ├── bounded-recursion.md
 │   └── backend-refactor.md
-├── resources.md              — reference paper list
-└── appel/                    — chapter-by-chapter Appel notes
+├── resources/                — resource hub, Appel notes, and paper notes
+│   ├── index.md
+│   └── appel/
 ```
 
 ### When to read the notes
@@ -108,5 +109,6 @@ Run additional examples when a change touches IR generation or pipeline ordering
 - `notes/index.md` — full knowledge index
 - `notes/pipeline.md` — CPS pipeline design
 - `notes/design-decisions.md` — design decisions
-- `notes/appel/index.md` — Appel chapter map
+- `notes/resources/index.md` — resource hub and reading list
+- `notes/resources/appel/index.md` — Appel chapter map
 - `CLAUDE.md` — Claude Code–specific project notes

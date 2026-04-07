@@ -2,7 +2,7 @@
 
 Reference: *Compiling with Continuations*, Andrew W. Appel (Cambridge University Press, 1992)
 
-See also: [quantum-semantics.md](quantum-semantics.md), [design-decisions.md](design-decisions.md), [appel/index.md](appel/index.md)
+See also: [quantum-semantics.md](quantum-semantics.md), [design-decisions.md](design-decisions.md), [resources/appel/index.md](resources/appel/index.md)
 
 ---
 
@@ -220,7 +220,7 @@ Eliminates all free variables. Every `CFix`-bound function becomes a closed
 value; its free variables are bundled into an explicit closure record. After
 this pass the program is one flat top-level `CFix` with no nested scopes.
 
-Module: `ClosureConv.hs` — see [passes/closure-conversion.md](passes/closure-conversion.md) and [appel/ch10-closure-conversion.md](appel/ch10-closure-conversion.md)
+Module: `ClosureConv.hs` — see [passes/closure-conversion.md](passes/closure-conversion.md) and [resources/appel/ch10-closure-conversion.md](resources/appel/ch10-closure-conversion.md)
 
 ### 8. Defunctionalization **[done]**
 

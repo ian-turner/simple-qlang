@@ -131,7 +131,7 @@ examples/               — sample FunQ programs
 notes/                  — compiler design notes
   index.md              — top-level knowledge index (start here)
   pipeline.md           — full CPS pipeline design
-  appel/                — chapter-by-chapter notes on Appel (1992)
+  resources/            — resource hub, Appel notes, and paper notes
   passes/               — per-pass design notes
   future/               — planned work
 resources/              — reference PDFs (git-ignored)
@@ -182,4 +182,4 @@ changes by building and running representative examples.
 | Register spilling | Deferred |
 | OpenQASM emission | Done (first cut; inlines from `output`, emits output arrays for homogeneous results, and renders boolean two-arm branches as `if/else`) |
 
-See `notes/appel/index.md` for the mapping of remaining stages to Appel chapters.
+See `notes/resources/appel/index.md` for the mapping of remaining stages to Appel chapters.

@@ -4,7 +4,7 @@
 **Input:** interface-flattened `CExp`
 **Output:** flat closed `CExp` with a single top-level `CFix`
 
-See also: [../pipeline.md](../pipeline.md), [../quantum-semantics.md](../quantum-semantics.md), [../appel/ch10-closure-conversion.md](../appel/ch10-closure-conversion.md)
+See also: [../pipeline.md](../pipeline.md), [../quantum-semantics.md](../quantum-semantics.md), [../resources/appel/ch10-closure-conversion.md](../resources/appel/ch10-closure-conversion.md)
 
 ---
 

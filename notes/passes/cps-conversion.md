@@ -4,7 +4,7 @@
 **Input:** `LExp` (Lambda IR from `Lower.hs`)
 **Output:** `CExp` (CPS IR)
 
-See also: [../pipeline.md](../pipeline.md), [../appel/ch05-cps-conversion.md](../appel/ch05-cps-conversion.md)
+See also: [../pipeline.md](../pipeline.md), [../resources/appel/ch05-cps-conversion.md](../resources/appel/ch05-cps-conversion.md)
 
 ---
 

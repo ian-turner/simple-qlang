@@ -5,7 +5,8 @@ Compiler described: Standard ML of New Jersey (SML/NJ).
 
 This directory contains chapter-by-chapter notes on the book, focused on how
 each chapter's content applies to the FunQ → OpenQASM/QIR compilation pipeline.
-See also [../pipeline.md](../pipeline.md) for the high-level strategy document and [../index.md](../index.md) for the full knowledge index.
+See also [../../pipeline.md](../../pipeline.md) for the high-level strategy
+document and [../../index.md](../../index.md) for the full knowledge index.
 
 ---
 

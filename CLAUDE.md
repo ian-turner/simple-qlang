@@ -92,7 +92,7 @@ introducing any optional optimizations or the linear type checker.
 - CPS optimizations: β-contraction, η-reduction, inlining, CSE (Appel Chs 6–9)
 - Register/qubit spilling (Appel Ch 11)
 
-See `notes/appel/index.md` for the mapping of stages to Appel chapters.
+See `notes/resources/appel/index.md` for the mapping of stages to Appel chapters.
 
 ---
 

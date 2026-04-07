@@ -24,8 +24,8 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 | Static shape analysis — list sizes and parametric shapes | [passes/static-shape.md](passes/static-shape.md) |
 | Bounded recursion lowering — future plan | [future/bounded-recursion.md](future/bounded-recursion.md) |
 | Backend refactor — CPS→SSA reading map | [future/backend-refactor.md](future/backend-refactor.md) |
-| Reference papers — download manifest | [resources.md](resources.md) |
-| Appel chapter notes | [appel/index.md](appel/index.md) |
+| Resource hub — reading list and paper notes | [resources/index.md](resources/index.md) |
+| Appel chapter notes | [resources/appel/index.md](resources/appel/index.md) |
 
 ---
 
