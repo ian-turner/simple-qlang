@@ -21,7 +21,7 @@ data Variable = Variable (AtomOfKind V) (NoBind String)
   deriving (Nominal.Generic, Bindable, Nominal, NominalShow, NominalSupport, Ord)
 
 instance Show Variable where
-  show (Variable a _) = show a
+  show (Variable a (NoBind hint)) = show a ++ "{" ++ hint ++ "}"
 
 instance NominalShow (NoBind String) where
   showsPrecSup sup d (NoBind x) = showsPrecSup sup d x

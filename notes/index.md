@@ -37,7 +37,7 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 | `Resolve.hs` | Scope resolution: `ConcreteSyntax` → `Syntax` |
 | `Syntax.hs` | AST using the `nominal` library for alpha-equivalence |
 | `TopMonad.hs` | Top-level compilation monad |
-| `Utils.hs` | Shared utilities |
+| `Utils.hs` | Shared utilities, including fresh variable generation and variable/debug rendering |
 | `LambdaIR.hs` | Lambda IR datatype (`LExp`) |
 | `Lower.hs` | Lowers resolved AST to `LExp` |
 | `CPSExp.hs` | CPS IR datatype (`CExp`, `Value`, `AccessPath`) |
