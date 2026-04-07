@@ -6,7 +6,7 @@ repo-root `resources/` directory.
 
 Current focus:
 - Appel chapter notes live in [appel/index.md](appel/index.md)
-- The first standalone paper note is [kelsey-ssa-cps.md](kelsey-ssa-cps.md)
+- Standalone paper notes so far: [kelsey-ssa-cps.md](kelsey-ssa-cps.md), [maurer-compiling-without-continuations.md](maurer-compiling-without-continuations.md)
 
 Downloaded PDFs live in the repo-root `resources/` directory (git-ignored). The
 download manifest is `resources/papers.txt`, read by `scripts/get_papers.sh`.
@@ -19,7 +19,7 @@ download manifest is `resources/papers.txt`, read by `scripts/get_papers.sh`.
 |---|---|---|---|---|
 | Appel, *Compiling with Continuations* | `resources/appel-continuations.pdf` | Foundation for the CPS IR and the current middle end | in progress | [appel/index.md](appel/index.md) |
 | Kelsey, *A Correspondence between CPS and SSA* | `resources/kelsey-ssa-cps.pdf` | Most direct guide for treating join continuations as backend blocks | started | [kelsey-ssa-cps.md](kelsey-ssa-cps.md) |
-| Maurer et al., *Compiling without Continuations* | `resources/maurer-compiling-without-continuations.pdf` | Join points as explicit, second-class control nodes | not started | — |
+| Maurer et al., *Compiling without Continuations* | `resources/maurer-compiling-without-continuations.pdf` | Join points as explicit, second-class control nodes | started | [maurer-compiling-without-continuations.md](maurer-compiling-without-continuations.md) |
 | Kennedy, *Compiling with Continuations, Continued* | `resources/kennedy-compiling-with-continuations-continued.pdf` | Contification and staged CPS backend improvement | not started | — |
 | Cong et al., *Compiling with Continuations, or without? Whatever.* | `resources/cong-whatever.pdf` | Design-space survey for an incremental backend refactor | not started | — |
 | Leijen and Lorenzen, *Tail recursion modulo context* | `resources/leijen-lorenzen-trmc.pdf` | Primary bounded-recursion reference for turning structural recursion into loops | not started | — |
