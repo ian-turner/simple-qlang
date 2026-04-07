@@ -25,6 +25,69 @@ because such programs would require an unbounded qubit array.
 
 ---
 
+## Refined direction
+
+The intended end state is stricter than the current implementation:
+- Residual recursion must never reach emission.
+- Every recursive program must be either:
+  - evaluated away at compile time,
+  - lowered to an explicit loop form, or
+  - rejected with a compile-time error.
+- Budget-unrolling in the emitter is transitional only.
+
+This yields four practical buckets:
+
+### 0. Static classical recursion → evaluate away
+
+If a self-recursive function is pure classical code and all arguments relevant
+to the recursion are compile-time constants, it should be partially evaluated
+before backend emission rather than turned into a loop.
+
+Example: `countdown_zero 3` should reduce to `True`; emitting a runtime `while`
+loop is correct but unnecessarily low-level. More generally, classical helper
+recursion that only computes constants, indices, loop bounds, or dead control
+flow should disappear during compilation.
+
+This is not a backend concern. It should be handled by a dedicated classical
+partial-evaluation / constant-propagation pass that runs before bounded
+recursion lowering.
+
+### 1. Static bounded recursion → explicit `for`
+
+If recursion describes finite traversal of statically sized data or a statically
+bounded counter, lower it to explicit loop IR rather than unrolling it.
+
+This includes:
+- integer countdown/build loops like `init_n`
+- structural list recursion over statically known lists like `meas_all`
+- loop-carried traversals like `cnot_layer`
+- nested traversals like `qft_core` / `apply_rotations`
+
+The important point is that `ghz` and `qft_n` are not special cases that need
+recursive emitter evaluation. They are ordinary static traversals once list
+sizes and loop-carried state are made explicit.
+
+### 2. Dynamic qubit-neutral recursion → explicit `while`
+
+If the trip count is not statically known but the recursive body is
+qubit-neutral, lower to an explicit dynamic loop. `rus_loop` remains the
+canonical example.
+
+Today this is recognized late by `isTailLoop` inside `OpenQASM.hs`. That is
+good enough as a first cut, but the long-term target should be an earlier IR
+representation for dynamic loops rather than backend-only pattern matching.
+
+### 3. Everything else → reject
+
+Any recursive shape that is not statically evaluable, not statically bounded,
+and not a qubit-neutral dynamic loop must fail before emission.
+
+In particular, dynamic qubit-allocating recursion such as `init_n x` must be
+rejected; there is no meaningful OpenQASM lowering because the total qubit
+count is not statically bounded.
+
+---
+
 ## Architecture decision: `CFor` IR node, not unrolling
 
 The chosen approach is to add a `CFor` constructor to `CPSExp.hs` and thread it
@@ -40,6 +103,19 @@ middle end. Reasons:
   RecordFlatten, and the OpenQASM emitter to handle `CFor` and the companion
   `VQubitArr` value constructor. These are mostly mechanical traversal cases,
   with the exception of QubitHoist (see below).
+
+This still looks like the right first implementation step. A later CFG / block
+backend may make loop exits, joins, and classically controlled regions easier to
+express, but it does not remove the need for:
+- static classical evaluation,
+- shape inference for list sizes,
+- structural recursion recognition, and
+- early rejection of unsupported recursive programs.
+
+So a CFG backend should be treated as an optional downstream simplification, not
+as the prerequisite for fixing recursion. The hard part for `ghz` and `qft_n`
+is recovering bounded iteration structure, not merely changing the final control
+representation used by the emitter.
 
 `CFor` represents Class 1 (static) loops only. The upper bound must be
 statically derivable from the top-level call site — either a literal `VInt n`
