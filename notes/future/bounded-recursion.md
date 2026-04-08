@@ -116,10 +116,10 @@ The resulting picture is:
 - recover a static iteration space where possible
 - then lower to `CFor`, `while`, or a compile-time error
 
-This reinforced one architectural point: a CFG / explicit-join backend may help
-express loops later, but it is not the prerequisite for fixing `ghz`, `qft_n`,
-or other bounded-recursion cases. The hard part is recovering bounded
-iteration, not merely changing the final control representation.
+See [../design-decisions.md](../design-decisions.md) and
+[backend-refactor.md](backend-refactor.md) for the project-level split:
+bounded recursion is blocked on recovering bounded iteration and legality, not
+on first building a CFG / explicit-join backend.
 
 ---
 
@@ -139,9 +139,10 @@ middle end. Reasons:
   `VQubitArr` value constructor. These are mostly mechanical traversal cases,
   with the exception of QubitHoist (see below).
 
-This still looks like the right first implementation step. A later CFG / block
-backend may make loop exits, joins, and classically controlled regions easier to
-express, but it does not remove the need for:
+This still looks like the right first implementation step. The backend-refactor
+work in [backend-refactor.md](backend-refactor.md) is a downstream emitter
+cleanup, not the dependency edge for this note. `CFor` is still needed because
+bounded-recursion lowering must solve:
 - static classical evaluation,
 - shape inference for list sizes,
 - structural recursion recognition, and
@@ -154,11 +155,6 @@ However, it is not a substitute for `CFor` in FunQ. Tail-recursive workers still
 hide output size in an accumulator/context unless we recover a static bound and
 erase the aggregate shape before emission. For FunQ, TRMC is upstream guidance
 for exposing loop-carried state, not the final backend representation.
-
-So a CFG backend should be treated as an optional downstream simplification, not
-as the prerequisite for fixing recursion. The hard part for `ghz` and `qft_n`
-is recovering bounded iteration structure, not merely changing the final control
-representation used by the emitter.
 
 `CFor` represents Class 1 (static) loops only. The upper bound must be
 statically derivable from the top-level call site — either a literal `VInt n`

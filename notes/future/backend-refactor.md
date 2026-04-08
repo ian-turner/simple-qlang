@@ -31,15 +31,39 @@ Recent reading made the scope boundary clearer:
   they were ordinary callable functions and stop relying on
   `splitCommonSuffix` as the primary branch-merge mechanism.
 
-This work should be staged independently from bounded-recursion lowering.
-Improving join handling may make later control emission cleaner, but it does not
-eliminate the separate need for:
-- static shape inference
-- TRMC/TMC-style recognition of residual recursive context
-- explicit `CFor` lowering for statically bounded recursion
-- early rejection of dynamic qubit-growing recursion
+The canonical project-level statement of this split lives in
+[../design-decisions.md](../design-decisions.md). In short:
+- this note owns emitter/control-flow cleanup for branch-local joins
+- [bounded-recursion.md](bounded-recursion.md) owns shape recovery, recursion
+  legality classification, and `CFor`-based loop lowering
 
-Conversely, those recursion fixes should not wait for a CFG/SSA backend.
+---
+
+## Reading progress
+
+Initial reading notes now exist for the core backend-refactor papers:
+
+- [../resources/kelsey-ssa-cps.md](../resources/kelsey-ssa-cps.md) — initial
+  notes written
+- [../resources/maurer-compiling-without-continuations.md](../resources/maurer-compiling-without-continuations.md)
+  — initial notes written
+- [../resources/kennedy-compiling-with-continuations-continued.md](../resources/kennedy-compiling-with-continuations-continued.md)
+  — initial notes written
+- [../resources/cong-whatever.md](../resources/cong-whatever.md) — initial
+  notes written
+- [../resources/appel/index.md](../resources/appel/index.md) — background /
+  reference reading in progress
+
+Current synthesis from that reading:
+- Keep CPS as the main middle-end representation.
+- Treat `LSwitch` join continuations as backend-local blocks/jumps rather than
+  ordinary callable functions.
+- Use a lightweight structural join classification first: local, saturated,
+  tail-called, non-escaping.
+- Keep the first implementation emitter-scoped; a whole CFG/SSA backend is
+  optional, not the prerequisite for fixing join lowering.
+- Keep bounded-recursion work separate; better join handling may simplify later
+  control emission, but it does not replace shape recovery or legality checks.
 
 ---
 
@@ -48,6 +72,8 @@ Conversely, those recursion fixes should not wait for a CFG/SSA backend.
 ### 1. `resources/kelsey-ssa-cps.pdf`
 
 **Paper:** Richard Kelsey, *A Correspondence between CPS and Static Single-Assignment Form*
+
+Reading note: [../resources/kelsey-ssa-cps.md](../resources/kelsey-ssa-cps.md)
 
 **Most directly useful.** Key fit:
 - Treat continuation parameters like phi/block parameters
@@ -61,6 +87,8 @@ continuations into backend blocks without needing a full SSA conversion pass.
 
 **Paper:** Maurer, Downen, Ariola, Peyton Jones, *Compiling without Continuations*
 
+Reading note: [../resources/maurer-compiling-without-continuations.md](../resources/maurer-compiling-without-continuations.md)
+
 **Best reference for making join points explicit and second-class.** Key fit:
 - Separate local control-flow joins from full callable functions
 - Give joins dedicated IR status
@@ -72,6 +100,8 @@ joins as ordinary calls" design decision.
 ### 3. `resources/kennedy-compiling-with-continuations-continued.pdf`
 
 **Paper:** Andrew Kennedy, *Compiling with Continuations, Continued*
+
+Reading note: [../resources/kennedy-compiling-with-continuations-continued.md](../resources/kennedy-compiling-with-continuations-continued.md)
 
 **Useful for keeping CPS as the backend representation while improving join handling.** Key fit:
 - Contification-style thinking
@@ -86,6 +116,8 @@ of CPS.
 
 **Paper:** Cong, Osvald, Essertel, Rompf, *Compiling with Continuations, or without? Whatever.*
 
+Reading note: [../resources/cong-whatever.md](../resources/cong-whatever.md)
+
 **Design-space paper — scope control.** Key fit:
 - Compare CPS-heavy vs join-point-heavy vs mixed IR strategies
 - Justify an incremental migration rather than an all-at-once backend rewrite
@@ -97,19 +129,28 @@ sized and does not grow into a full compiler IR redesign.
 
 **Paper:** Andrew Appel, *Compiling with Continuations*
 
+Reading note: [../resources/appel/index.md](../resources/appel/index.md)
+
 **Foundational context for the CPS side already in FunQ.** Use during planning
 to cross-check that new backend handling still respects CPS tree semantics
 produced by `src/ToCPS.hs`.
 
 ---
 
-## Recommended reading order
+## Reading order and current status
 
-1. `resources/kelsey-ssa-cps.pdf`
-2. `resources/maurer-compiling-without-continuations.pdf`
-3. `resources/kennedy-compiling-with-continuations-continued.pdf`
-4. `resources/cong-whatever.pdf`
-5. `resources/appel-continuations.pdf` as background/reference while coding
+1. `resources/kelsey-ssa-cps.pdf` — initial notes written; see
+   [../resources/kelsey-ssa-cps.md](../resources/kelsey-ssa-cps.md)
+2. `resources/maurer-compiling-without-continuations.pdf` — initial notes
+   written; see
+   [../resources/maurer-compiling-without-continuations.md](../resources/maurer-compiling-without-continuations.md)
+3. `resources/kennedy-compiling-with-continuations-continued.pdf` — initial
+   notes written; see
+   [../resources/kennedy-compiling-with-continuations-continued.md](../resources/kennedy-compiling-with-continuations-continued.md)
+4. `resources/cong-whatever.pdf` — initial notes written; see
+   [../resources/cong-whatever.md](../resources/cong-whatever.md)
+5. `resources/appel-continuations.pdf` — background/reference in progress; see
+   [../resources/appel/index.md](../resources/appel/index.md)
 
 ---
 

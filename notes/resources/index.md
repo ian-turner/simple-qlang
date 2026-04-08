@@ -18,14 +18,14 @@ download manifest is `resources/papers.txt`, read by `scripts/get_papers.sh`.
 | Resource | PDF | Why relevant | Status | Notes |
 |---|---|---|---|---|
 | Appel, *Compiling with Continuations* | `resources/appel-continuations.pdf` | Foundation for the CPS IR and the current middle end | in progress | [appel/index.md](appel/index.md) |
-| Kelsey, *A Correspondence between CPS and SSA* | `resources/kelsey-ssa-cps.pdf` | Most direct guide for treating join continuations as backend blocks | started | [kelsey-ssa-cps.md](kelsey-ssa-cps.md) |
-| Maurer et al., *Compiling without Continuations* | `resources/maurer-compiling-without-continuations.pdf` | Join points as explicit, second-class control nodes | started | [maurer-compiling-without-continuations.md](maurer-compiling-without-continuations.md) |
-| Kennedy, *Compiling with Continuations, Continued* | `resources/kennedy-compiling-with-continuations-continued.pdf` | Contification and staged CPS backend improvement | started | [kennedy-compiling-with-continuations-continued.md](kennedy-compiling-with-continuations-continued.md) |
-| Cong et al., *Compiling with Continuations, or without? Whatever.* | `resources/cong-whatever.pdf` | Design-space survey for an incremental backend refactor | started | [cong-whatever.md](cong-whatever.md) |
-| Leijen and Lorenzen, *Tail recursion modulo context* | `resources/leijen-lorenzen-trmc.pdf` | Primary bounded-recursion reference for turning structural recursion into loops | started | [leijen-lorenzen-trmc.md](leijen-lorenzen-trmc.md) |
-| Allain et al., *Tail Modulo Cons, OCaml, and Relational Separation Logic* | `resources/allain-bour-clement-pottier-scherer-tmc-ocaml.pdf` | Production-compiler reference for list-building recursion | started | [allain-bour-clement-pottier-scherer-tmc-ocaml.md](allain-bour-clement-pottier-scherer-tmc-ocaml.md) |
-| Peyton Jones, *Call-pattern Specialisation for Haskell Programs* | `resources/peyton-jones-specconstr.pdf` | Static boundedness and recursive specialization | started | [peyton-jones-specconstr.md](peyton-jones-specconstr.md) |
-| Ohori and Sasano, *Lightweight Fusion by Fixed Point Promotion* | `resources/ohori-sasano-fixed-point-promotion.pdf` | Recursive fusion / fixed-point rewriting reference | started | [ohori-sasano-fixed-point-promotion.md](ohori-sasano-fixed-point-promotion.md) |
+| Kelsey, *A Correspondence between CPS and SSA* | `resources/kelsey-ssa-cps.pdf` | Most direct guide for treating join continuations as backend blocks | initial notes | [kelsey-ssa-cps.md](kelsey-ssa-cps.md) |
+| Maurer et al., *Compiling without Continuations* | `resources/maurer-compiling-without-continuations.pdf` | Join points as explicit, second-class control nodes | initial notes | [maurer-compiling-without-continuations.md](maurer-compiling-without-continuations.md) |
+| Kennedy, *Compiling with Continuations, Continued* | `resources/kennedy-compiling-with-continuations-continued.pdf` | Contification and staged CPS backend improvement | initial notes | [kennedy-compiling-with-continuations-continued.md](kennedy-compiling-with-continuations-continued.md) |
+| Cong et al., *Compiling with Continuations, or without? Whatever.* | `resources/cong-whatever.pdf` | Design-space survey for an incremental backend refactor | initial notes | [cong-whatever.md](cong-whatever.md) |
+| Leijen and Lorenzen, *Tail recursion modulo context* | `resources/leijen-lorenzen-trmc.pdf` | Primary bounded-recursion reference for turning structural recursion into loops | initial notes | [leijen-lorenzen-trmc.md](leijen-lorenzen-trmc.md) |
+| Allain et al., *Tail Modulo Cons, OCaml, and Relational Separation Logic* | `resources/allain-bour-clement-pottier-scherer-tmc-ocaml.pdf` | Production-compiler reference for list-building recursion | initial notes | [allain-bour-clement-pottier-scherer-tmc-ocaml.md](allain-bour-clement-pottier-scherer-tmc-ocaml.md) |
+| Peyton Jones, *Call-pattern Specialisation for Haskell Programs* | `resources/peyton-jones-specconstr.pdf` | Static boundedness and recursive specialization | initial notes | [peyton-jones-specconstr.md](peyton-jones-specconstr.md) |
+| Ohori and Sasano, *Lightweight Fusion by Fixed Point Promotion* | `resources/ohori-sasano-fixed-point-promotion.pdf` | Recursive fusion / fixed-point rewriting reference | initial notes | [ohori-sasano-fixed-point-promotion.md](ohori-sasano-fixed-point-promotion.md) |
 
 ---
 
