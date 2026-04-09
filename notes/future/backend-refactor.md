@@ -12,12 +12,20 @@ Current state:
   merging relies on suffix hoisting (`splitCommonSuffix`) rather than explicit
   join handling
 
+The root cause is architectural: `runExp` conflates **analysis** ("what kind of
+thing is this `CFix`?") with **emission** ("now write some OpenQASM"). By the time
+`runExp` encounters a `CFix`, it's already mid-emission and has to make ad-hoc
+decisions inline. `splitCommonSuffix` is a symptom of this — a repair applied
+after the fact because the emitter never had a chance to look ahead.
+
 Refactor target:
-- Lower branch/control structure explicitly rather than recovering it after
-  per-arm interpretation
-- Distinguish local join points from ordinary callable functions where useful
-- Preserve the current emitter as a fallback while landing a more principled
-  path for `if/else`-style joins
+- Add a classification pre-pass that runs before emission and annotates every
+  `CFix` binding with its control-flow role (`FixKind`)
+- Make `runExp` a consumer of those annotations rather than a combined
+  analyzer/emitter
+- Replace suffix hoisting with explicit join parameter threading for classified
+  `JoinBlock` shapes
+- Preserve the current emitter as a fallback for unclassified shapes
 
 ---
 
@@ -58,10 +66,8 @@ Current synthesis from that reading:
 - Keep CPS as the main middle-end representation.
 - Treat `LSwitch` join continuations as backend-local blocks/jumps rather than
   ordinary callable functions.
-- Use a lightweight structural join classification first: local, saturated,
-  tail-called, non-escaping.
-- Keep the first implementation emitter-scoped; a whole CFG/SSA backend is
-  optional, not the prerequisite for fixing join lowering.
+- Use a classification pre-pass to annotate `CFix` bindings before emission;
+  the emitter should be a consumer of annotations, not an ad-hoc analyzer.
 - Keep bounded-recursion work separate; better join handling may simplify later
   control emission, but it does not replace shape recovery or legality checks.
 
@@ -165,17 +171,41 @@ Primary references: Kelsey, Maurer
 - `src/OpenQASM.hs` still uses suffix hoisting; explicit branch/join lowering
   in the emitter is the remaining work
 
-### Pass 2 — Explicit join handling in the emitter *(planned)*
+### Pass 2 — Classification pre-pass + emitter as consumer *(planned)*
 
-Primary references: Kelsey, Kennedy
+Primary references: Kelsey, Kennedy, Maurer
 
-Target:
-- Thread branch-produced values through explicit join parameters in the emitter
-- Run shared continuation code once after the branch instead of relying on
-  suffix hoisting
-- Validate nested `if/else` and measurement-controlled examples
+The core structural change: extract analysis out of `runExp` into a dedicated
+pre-pass, so that `runExp` becomes a consumer of annotations rather than an
+inline analyzer/emitter hybrid.
 
-### Pass 3 — Generalize beyond `LSwitch` *(planned)*
+**Pre-pass:** `classifyFixBindings :: CExp -> Map String FixKind`
+
+Walk the CPS tree before emission and classify every `CFix` binding:
+
+```haskell
+data FixKind
+  = JoinBlock   -- local, tail-called only, non-escaping; from LSwitch; emit as if/else join
+  | TailLoop    -- self-recursive tail loop; emit as while
+  | StaticLoop  -- self-recursive with static trip count; planned: emit as for
+  | InlineExpand -- fallback; guarded inline expansion
+```
+
+`isTailLoop` (currently in `OpenQASM.hs`) moves into this pre-pass as the
+`TailLoop` recognizer. The `JoinBlock` recognizer checks: local scope, all
+call sites are tail calls, never passed as a value, saturated application only
+— matching the `Ajump` role from Kelsey and the contification criterion from Maurer.
+
+**Emitter change:** Thread the classification map through `runExp`.
+`runExp ... (CFix defs body)` dispatches on `FixKind` rather than re-analyzing
+on the fly. For `JoinBlock` shapes, branch arms emit their join-parameter
+assignments and fall through to the join body, which is emitted once — replacing
+`splitCommonSuffix` on the primary path. `splitCommonSuffix` remains as a fallback
+for `InlineExpand` shapes.
+
+Validate: nested `if/else` and measurement-controlled examples.
+
+### Pass 3 — Generalize and clean up *(planned)*
 
 Primary references: Maurer, Cong
 
@@ -183,20 +213,29 @@ Target:
 - Generalize beyond the minimal `LSwitch` case if warranted
 - Decide how much of suffix hoisting should remain as a fallback optimization
 - Document which `CFix` shapes are treated as backend joins vs ordinary callables
+- `StaticLoop` slots into the classification map here once `CFor` IR is landed
+  (see [bounded-recursion.md](bounded-recursion.md))
 
 ---
 
 ## Practical caution
 
-The CPS-level join-continuation fix is done. The remaining work is narrowly in
-the emitter:
-- Teach the emitter to recognize join-continuation calls as branch exits
-- Do not attempt a whole-backend replacement in the same pass
-- Keep current emitter behavior available for unsupported shapes
+The CPS-level join-continuation fix is done. The remaining work is in the emitter.
+The key architectural discipline:
+
+- Analysis (what kind of thing is this `CFix`?) happens in a pre-pass before
+  emission begins
+- Emission (`runExp`) is a consumer of pre-pass annotations, not a combined
+  analyzer/emitter
+- Do not attempt a whole-backend replacement or a new IR layer — OpenQASM's
+  structured control flow means a flat block IR would need immediate
+  re-structuring, which gains nothing
 
 The specific near-term target is:
-- branch-local `CFix` continuations from `LSwitch`
-- explicit join parameters as branch-exit values
-- one shared continuation body emitted after the branch
+- `classifyFixBindings` pre-pass classifying `JoinBlock` and `TailLoop` shapes
+- `runExp` dispatches on `FixKind`
+- branch-local `JoinBlock` continuations emit as structured if/else with explicit
+  join parameter threading
+- `isTailLoop` removed from inline emission and replaced by pre-pass classification
 
-This is a focused emitter cleanup, not a prerequisite for the recursion plan.
+This is a focused emitter refactor, not a prerequisite for the recursion plan.
