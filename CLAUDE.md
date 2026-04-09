@@ -32,7 +32,7 @@ running the examples manually.
 | `CPSExp.hs` | CPS IR datatype (`CExp`, `Value`, `AccessPath`) |
 | `ToCPS.hs` | CPS conversion: `LExp` → `CExp` (Appel Ch 5) |
 | `RecElim.hs` | Recursion check: errors on mutual recursion in multi-function CFix groups; single-function self-recursion is allowed through |
-| `BoundedRecursion.hs` | Legacy: detects bounded top-level self-recursive declarations (largely superseded by the while-loop path in OpenQASM.hs) |
+| `BoundedRecursion.hs` | Top-level function helpers for recursion handling; exposes `extractTopLevelFunction` for the emitter and counted-recursion scaffolding for future lowering |
 | `RecordShape.hs` | Whole-module tuple/data-flow record-shape analysis |
 | `ModuleRecordFlatten.hs` | Interprocedural interface flattening before closure conversion |
 | `CPSAtom.hs` | Shared atom/environment helpers used by both record-flattening passes |
@@ -43,7 +43,8 @@ running the examples manually.
 | `Defunc.hs` | Defunctionalization: replaces runtime code pointers with tags and dispatch |
 | `QubitHoist.hs` | Hoists `init` to static qubit slots after defunctionalization |
 | `RecordFlatten.hs` | Local record simplification after qubit hoisting |
-| `Main.hs` | Entry point: parses CLI args, calls `compileModule`, prints emitted OpenQASM |
+| `StaticShape.hs` | Whole-module list-size / aggregate shape inference scaffold; not currently wired into `CompilePipeline.hs` |
+| `Main.hs` | Entry point: parses CLI args, calls `compileModule`, prints emitted OpenQASM, and can dump intermediate IR with `--debug` |
 
 ## Key dependencies
 
@@ -69,8 +70,9 @@ introducing any optional optimizations or the linear type checker.
 2. Lower to λ-calculus IR (Appel Ch 4) — *done*
 3. CPS conversion (Appel Ch 5) — *done*
 4. Recursion elimination — *done*. Local mutual recursion (multi-function CFix
-   groups) is rejected. Single-function self-recursion passes through and is
-   compiled to an OpenQASM `while` loop in the emitter (see stage 10).
+   groups) is rejected. Single-function self-recursion passes through to the
+   emitter (see stage 10), where tail loops become `while` loops and other
+   self-recursive shapes fall back to guarded inline expansion (depth 1000).
 5. Closure conversion (Appel Ch 10) — *done*
 6. Defunctionalization — *done*
 7. Qubit hoisting — *done*
