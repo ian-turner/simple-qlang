@@ -80,6 +80,8 @@ executable funq
         QubitHoist
         GateDef
         OpenQASM
+        QASMRender
+        QASMAnalysis
         ModuleRecordFlatten
         RecordFlatten
         CompilePipeline
