@@ -17,6 +17,7 @@ download manifest is `resources/papers.txt`, read by `scripts/get_papers.sh`.
 
 | Resource | PDF | Why relevant | Status | Notes |
 |---|---|---|---|---|
+| **Linear types and Proto-Quipper** (reading list) | see note | Foundation for FunQ's type system | not started | [linear-types-proto-quipper.md](linear-types-proto-quipper.md) |
 | Appel, *Compiling with Continuations* | `resources/appel-continuations.pdf` | Foundation for the CPS IR and the current middle end | in progress | [appel/index.md](appel/index.md) |
 | Kelsey, *A Correspondence between CPS and SSA* | `resources/kelsey-ssa-cps.pdf` | Most direct guide for treating join continuations as backend blocks | initial notes | [kelsey-ssa-cps.md](kelsey-ssa-cps.md) |
 | Maurer et al., *Compiling without Continuations* | `resources/maurer-compiling-without-continuations.pdf` | Join points as explicit, second-class control nodes | initial notes | [maurer-compiling-without-continuations.md](maurer-compiling-without-continuations.md) |
