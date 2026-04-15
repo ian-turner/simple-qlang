@@ -11,9 +11,8 @@ cabal build                              # build the compiler
 cabal run funq -- examples/bell00.funq  # run on a source file
 ```
 
-The compiler now runs through a first OpenQASM emission path and prints the
-generated OpenQASM to stdout. There is no test suite yet; verify changes by
-running the examples manually.
+The compiler prints generated OpenQASM to stdout. There is no test suite yet;
+verify changes by running the examples manually.
 
 ---
 
@@ -38,7 +37,7 @@ running the examples manually.
 | `CPSAtom.hs` | Shared atom/environment helpers used by both record-flattening passes |
 | `GateDef.hs` | Conservative top-level gate/`def` classification |
 | `CompilePipeline.hs` | Orchestrates per-declaration and whole-module compilation passes; produces `CompiledModule` |
-| `OpenQASM.hs` | First entrypoint-driven OpenQASM emitter |
+| `OpenQASM.hs` | Entrypoint-driven OpenQASM emitter |
 | `ClosureConv.hs` | Closure conversion: eliminates free variables (Appel Ch 10) |
 | `Defunc.hs` | Defunctionalization: replaces runtime code pointers with tags and dispatch |
 | `QubitHoist.hs` | Hoists `init` to static qubit slots after defunctionalization |
@@ -98,6 +97,25 @@ See `notes/resources/appel/index.md` for the mapping of stages to Appel chapters
 
 ---
 
+## Design constraints
+
+- **Backend-neutral middle end**: OpenQASM is the only active backend, but IR passes through `RecordFlatten` must not assume OpenQASM structure. Keep backend-specific lowering inside `OpenQASM.hs` and `QubitHoist.hs`.
+- **Qubit allocation**: one static slot per `init`; no liveness-based reuse yet.
+- **Recursion check ordering**: `RecElim` runs before closure conversion; the emitter handles tail-loop recognition.
+- **No design decisions without a note**: if a choice changes the pipeline or semantics, record it in `notes/design-decisions.md`.
+
+---
+
+## Current status and gaps
+
+- No type checker — assumes well-typed, linear input
+- No automated test suite — validate with `cabal build` and example runs
+- Emitter inlines all functions from `output`; does not yet emit reusable `gate`/`def` declarations
+- Bounded recursion uses budget-unrolling (depth 1000); explicit `CFor` IR, static shape inference (`StaticShape.hs`), and static list erasure are planned — see `notes/future/bounded-recursion.md`
+- `splitCommonSuffix` in the emitter is a temporary branch-merge heuristic; planned replacement with explicit join-block classification — see `notes/future/backend-refactor.md`
+
+---
+
 ## Quantum semantics constraints
 
 These affect every phase of the compiler and must not be violated:
@@ -122,6 +140,31 @@ These affect every phase of the compiler and must not be violated:
 
 The `notes/` directory is a structured knowledge library. Use it as follows:
 
+```
+notes/
+├── index.md                  — top-level hub; start here
+├── pipeline.md               — full CPS compilation pipeline with theory
+├── quantum-semantics.md      — quantum constraints that affect every pass
+├── design-decisions.md       — key design decisions with rationale
+├── issues.md                 — known bugs and limitations
+├── passes/                   — one note per compiler pass
+│   ├── cps-conversion.md
+│   ├── recursion.md
+│   ├── static-shape.md
+│   ├── record-flattening.md
+│   ├── closure-conversion.md
+│   ├── defunctionalization.md
+│   ├── qubit-hoisting.md
+│   ├── gate-def-classification.md
+│   └── openqasm-emission.md
+├── future/                   — planned work not yet implemented
+│   ├── bounded-recursion.md
+│   └── backend-refactor.md
+└── resources/                — resource hub, Appel notes, and paper notes
+    ├── index.md
+    └── appel/
+```
+
 **Before making changes:**
 - Read `notes/index.md` for orientation
 - Read the relevant `notes/passes/<pass>.md` note before touching any pass
@@ -136,6 +179,18 @@ The `notes/` directory is a structured knowledge library. Use it as follows:
 
 Notes must stay accurate and concise. Do not leave a note saying something is
 "planned" or a "limitation" if you just implemented or fixed it.
+
+---
+
+## Working rules
+
+- Prefer small, targeted edits over broad refactors.
+- When a change touches IR generation or pipeline ordering, run additional
+  examples beyond `bell00.funq` (e.g. `tele.funq`, `ghz.funq`, `rus.funq`).
+- Keep pipeline documentation in `notes/` aligned with implementation whenever
+  stage ordering or semantics change.
+
+---
 
 ## Other notes
 
