@@ -13,6 +13,7 @@ OpenQASM with a planned QIR backend reusing the same normalized IR.
 | Full pipeline — theory, stages, worked examples | [pipeline.md](pipeline.md) |
 | Quantum constraints that affect every pass | [quantum-semantics.md](quantum-semantics.md) |
 | Key design decisions | [design-decisions.md](design-decisions.md) |
+| Known bugs and limitations | [issues.md](issues.md) |
 | CPS conversion details and join continuations | [passes/cps-conversion.md](passes/cps-conversion.md) |
 | Recursion — local rejection, top-level check, while loops | [passes/recursion.md](passes/recursion.md) |
 | Record/tuple flattening — shape analysis and rewriting | [passes/record-flattening.md](passes/record-flattening.md) |

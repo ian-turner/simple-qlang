@@ -87,6 +87,7 @@ executable funq
         CompilePipeline
         RecordShape
         StaticShape
+        PrettyPrint
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
