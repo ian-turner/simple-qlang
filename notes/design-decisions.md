@@ -24,6 +24,14 @@ result goes through a separate `CSwitch`. See
 [quantum-semantics.md](quantum-semantics.md) for rationale and the full
 constraint context.
 
+## Dynamic lifting is implicit; no `bit` type
+
+Unlike Proto-Quipper, FunQ has no explicit `dynlift` operation and no separate
+`bit` type. Measurement (`meas`) produces a `Bool` directly — dynamic lifting
+is considered implicit in the measurement semantics. This simplifies the surface
+language and the type system by collapsing `Bit` and `Bool` into a single
+classical boolean type.
+
 ## Emit from interface-flattened CPS, not fully defunctionalized form
 
 The current emitter runs on the interface-flattened CPS rather than the

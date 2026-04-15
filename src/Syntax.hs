@@ -54,7 +54,6 @@ data Exp
   | LetTuple Exp (Bind [Variable] Exp)
   | IfExp Exp Exp Exp                         -- If/then/else branching
   | Case Exp [Alt]                            -- Case expression
-  | Dynlift                                   -- Dynamic lifting
   deriving (Eq, Generic, Nominal,
     NominalShow, NominalSupport, Show)
 

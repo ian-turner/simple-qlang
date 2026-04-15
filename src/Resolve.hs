@@ -162,9 +162,6 @@ resolve scope (C.BinOp op e1 e2) = do
   e2' <- resolve scope e2
   return $ A.App (A.App (A.Base op) e1') e2'
 
--- | Resolve dynamic lifting
-resolve scope C.Dynlift = return A.Dynlift
-
 -- | Resolve case expressions
 resolve scope (C.CaseExp scrut alts) =
   do scrut' <- resolve scope scrut

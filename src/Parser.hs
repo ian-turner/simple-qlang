@@ -134,9 +134,9 @@ appExp =
   arg
   where
     headExp =
-      dynliftExp <|> varExp
+      varExp
     arg =
-      try unit <|> try boolLit <|> try strLit <|> try piLit <|> try num <|> dynliftExp <|> varExp <|> tupleExp
+      try unit <|> try boolLit <|> try strLit <|> try piLit <|> try num <|> varExp <|> tupleExp
 
 boolLit :: Parser Exp
 boolLit = (reserved "True" >> return (BoolLit True))
@@ -193,9 +193,6 @@ lamExp = do
   reservedOp "->"
   e <- term
   return $ Lam args e
-
-dynliftExp :: Parser Exp
-dynliftExp = reserved "dynlift" >> return Dynlift
 
 -- | Parse a case expression
 caseExp :: Parser Exp
@@ -363,7 +360,6 @@ langStyle =
       , "if"
       , "then"
       , "else"
-      , "dynlift"
       , "data"
       , "where"
       , "module"

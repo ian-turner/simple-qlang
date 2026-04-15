@@ -35,7 +35,6 @@ data Exp
   | Lam [String] Exp                    -- Lambda expressions
   | IfExp Exp Exp Exp                   -- If/then/else expressions
   | CaseExp Exp [(Pat, Exp)]            -- case expression
-  | Dynlift                             -- Dynamic lifting function
   deriving (Show, Eq)
 
 -- | Type expressions

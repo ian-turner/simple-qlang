@@ -267,7 +267,6 @@ instance PP C.Exp where
     (text "case" <+> ppCAtom e <+> text "of") $$
     nest ind (vcat (map ppAlt alts))
     where ppAlt (pat, rhs) = (pp pat <+> ppFatArrow) $$ nest ind (pp rhs)
-  pp C.Dynlift = text "dynlift"
 
 ppCAtom :: C.Exp -> Doc
 ppCAtom e@(C.Var _)      = pp e
@@ -368,7 +367,6 @@ instance PP S.Exp where
   pp (S.Case e alts) =
     (text "case" <+> ppSAtom e <+> text "of") $$
     nest ind (vcat (map pp alts))
-  pp S.Dynlift = text "dynlift"
 
 instance PP S.Alt where
   pp (S.Alt bnd) =

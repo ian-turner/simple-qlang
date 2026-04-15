@@ -153,8 +153,6 @@ lowerExp (Case scrut alts) = do
         defaultArm = listToMaybe [body | (Nothing, body) <- arms]
     return (LApp (LLam t (LSwitch (LVar t) taggedArms defaultArm)) scrut')
 
-lowerExp Dynlift = throwError "Dynlift not supported in lambda lowering"
-
 -- ---------------------------------------------------------------------------
 -- Application
 
