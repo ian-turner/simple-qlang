@@ -180,7 +180,7 @@ compiled declarations; marks declarations in cyclic SCCs of size greater than
 allowed through so the backend can decide whether it is a tail loop or must be
 handled by inline expansion.
 
-**Emitter-side tail-loop recognition (`OpenQASM.hs`):** `isTailLoop`
+**Emitter-side tail-loop recognition (`QASMAnalysis.hs`, `isTailLoop`):**
 identifies self-recursive declarations where every recursive call passes the
 outer continuation unchanged. These become `while` loops at emission time. All
 other self-recursive declarations fall back to guarded inline expansion with a
@@ -263,7 +263,7 @@ OpenQASM program.
 | Self-recursive tail loop | OpenQASM 3.0 `while` loop |
 | Top-level `output` binding | `output` declaration |
 
-Module: `OpenQASM.hs` — see [passes/openqasm-emission.md](passes/openqasm-emission.md)
+Modules: `OpenQASM.hs`, `QASMAnalysis.hs`, `QASMRender.hs` — see [passes/openqasm-emission.md](passes/openqasm-emission.md)
 
 ### Planned: static list erasure + bounded recursion IR
 

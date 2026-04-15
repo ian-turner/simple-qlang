@@ -1,6 +1,6 @@
 # OpenQASM Emission
 
-**Module:** `src/OpenQASM.hs`
+**Modules:** `src/OpenQASM.hs` (emitter), `src/QASMAnalysis.hs` (CPS analysis), `src/QASMRender.hs` (rendering)
 
 See also: [../pipeline.md](../pipeline.md), [../future/backend-refactor.md](../future/backend-refactor.md)
 
@@ -98,8 +98,8 @@ tracked in [../future/backend-refactor.md](../future/backend-refactor.md).
 recursive call passes the outer continuation unchanged (directly or via
 η-trivial chains). If so, the function emits as an OpenQASM `while` loop.
 
-This recognition currently lives in `OpenQASM.hs`, not in a separate earlier
-normalization pass. It assumes the well-formed continuation shapes produced by
+This recognition lives in `QASMAnalysis.hs` (`isTailLoop`), which `OpenQASM.hs`
+imports. It is not yet a separate earlier normalization pass. It assumes the well-formed continuation shapes produced by
 `ToCPS.hs`.
 
 Otherwise the emitter falls back to guarded inline expansion with a 1000-call

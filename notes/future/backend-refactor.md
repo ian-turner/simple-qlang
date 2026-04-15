@@ -191,7 +191,7 @@ data FixKind
   | InlineExpand -- fallback; guarded inline expansion
 ```
 
-`isTailLoop` (currently in `OpenQASM.hs`) moves into this pre-pass as the
+`isTailLoop` (currently in `QASMAnalysis.hs`, imported by `OpenQASM.hs`) moves into this pre-pass as the
 `TailLoop` recognizer. The `JoinBlock` recognizer checks: local scope, all
 call sites are tail calls, never passed as a value, saturated application only
 — matching the `Ajump` role from Kelsey and the contification criterion from Maurer.

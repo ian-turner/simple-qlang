@@ -79,7 +79,7 @@ If the trip count is not statically known but the recursive body is
 qubit-neutral, lower to an explicit dynamic loop. `rus_loop` remains the
 canonical example.
 
-Today this is recognized late by `isTailLoop` inside `OpenQASM.hs`. That is
+Today this is recognized late by `isTailLoop` inside `QASMAnalysis.hs` (imported by `OpenQASM.hs`). That is
 good enough as a first cut, but the long-term target should be an earlier IR
 representation for dynamic loops rather than backend-only pattern matching.
 

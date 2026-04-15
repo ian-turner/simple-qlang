@@ -1,6 +1,6 @@
 # Recursion Check and Tail-Loop Compilation
 
-**Modules:** `src/RecElim.hs`, `src/BoundedRecursion.hs`, `src/CompilePipeline.hs`, `src/OpenQASM.hs`
+**Modules:** `src/RecElim.hs`, `src/BoundedRecursion.hs`, `src/CompilePipeline.hs`, `src/OpenQASM.hs`, `src/QASMAnalysis.hs`
 
 See also: [../pipeline.md](../pipeline.md), [../future/bounded-recursion.md](../future/bounded-recursion.md)
 
@@ -100,7 +100,7 @@ self-recursive declaration as a parameter list plus body. The same module also
 contains counted-recursion recognizers for planned `CFor`-based lowering, but
 those are not yet wired into `CompilePipeline.hs`.
 
-**Recognition (`isTailLoop` in `OpenQASM.hs`):** identifies self-recursive
+**Recognition (`isTailLoop` in `QASMAnalysis.hs`):** identifies self-recursive
 declarations where every recursive call passes the outer continuation unchanged
 — either directly or via η-trivial chains (including Appel's curried-
 application intermediates). These are tail loops (Class 2 candidates).
@@ -116,13 +116,13 @@ accumulate qubits. No additional while-loop qubit-neutrality check is required.
 well-formed continuation patterns produced by `ToCPS.hs`; it is not a separate
 typed proof of qubit-neutrality.
 
-**Class 3 early rejection (`OpenQASM.hs`):** before falling back to guarded
+**Class 3 early rejection (`OpenQASM.hs`, using `QASMAnalysis.bodyAllocatesQubits`):** before falling back to guarded
 inline expansion, the emitter now rejects the case where a self-recursive
 qubit-allocating function is called with no compile-time constant integer
 argument. This closes the earlier soundness hole around programs like
 `init_n x`, which would otherwise require an unbounded qubit array.
 
-**Emission (`isTailLoop` in `OpenQASM.hs`):** a recognized tail loop emits as
+**Emission:** a recognized tail loop emits as
 an OpenQASM 3.0 `while` loop. The loop body is the function body; the
 recursive call becomes the loop back-edge; the base case becomes the exit
 condition.
