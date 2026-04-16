@@ -30,7 +30,8 @@ Defunctionalization:
   label
 - Rewrites the closure-conversion indirect-call pattern
   `SELECT(0, clo, tag, APP(tag, clo : args))`
-  into `SWITCH(tag, [direct VLabel calls])`
+  into `SELECT(0, clo, tag, SWITCH(tag, [direct VLabel calls]))`,
+  preserving the `SELECT` binding so `tag` remains in scope
 
 ---
 

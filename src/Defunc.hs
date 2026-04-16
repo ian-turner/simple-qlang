@@ -91,10 +91,11 @@ rewriteValue _ val = val
 
 indirectDispatch :: TagMap -> Value -> Variable -> [Value] -> CExp
 indirectDispatch tagMap clo tag args =
-  CSwitch (VVar tag)
-    [ CApp (VLabel lbl) (clo : args)
-    | (lbl, _) <- sortOn snd (Map.toList tagMap)
-    ]
+  CSelect 0 clo tag $
+    CSwitch (VVar tag)
+      [ CApp (VLabel lbl) (clo : args)
+      | (lbl, _) <- sortOn snd (Map.toList tagMap)
+      ]
 
 
 collectClosureLabels :: CExp -> Set.Set String

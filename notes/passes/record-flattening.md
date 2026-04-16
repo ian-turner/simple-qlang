@@ -69,7 +69,8 @@ records are left alone.
 Runs after qubit hoisting. Tracks record layouts statically within one CPS
 expression:
 - Folds `CSelect`/`COffset` when the source record is locally known
-- Drops `CRecord` bindings when all downstream uses have been eliminated
+- Drops `CRecord`/`CSelect`/`COffset` bindings when all downstream uses have been eliminated
+- Eliminates `CSwitch` when the scrutinee resolves to a known `VInt n` — reduces to the single matching arm
 - Preserves `VQubit` leaves from the hoisting pass
 
 This handles administrative tuple records introduced by CPS conversion that

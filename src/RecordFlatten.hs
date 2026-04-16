@@ -62,7 +62,11 @@ flattenExp env (CFix defs body) =
   in CFix defs' (flattenExp env' body)
 
 flattenExp env (CSwitch val arms) =
-  CSwitch (rewriteValue env val) (map (flattenExp env) arms)
+  let val'  = rewriteValue env val
+      arms' = map (flattenExp env) arms
+  in case val' of
+       VInt n | n >= 0, n < length arms' -> arms' !! n
+       _                                 -> CSwitch val' arms'
 
 flattenExp env (CPrimOp op args results conts) =
   let env' = foldr Map.delete env results
