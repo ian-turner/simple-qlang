@@ -47,7 +47,10 @@ flattenExp env (COffset off val v body) =
               then COffset off val' v body'
               else body'
        Nothing ->
-         COffset off val' v (flattenExp env' body)
+         let body' = flattenExp env' body
+         in if occursInExp v body'
+              then COffset off val' v body'
+              else body'
 
 flattenExp env (CApp fn args) =
   CApp (rewriteValue env fn) (map (rewriteValue env) args)

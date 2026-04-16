@@ -55,43 +55,6 @@ closures (see above) would also directly reduce the table width.
 
 ---
 
-## `RecordFlatten` keeps dead `COffset` bindings when source is opaque
-
-**Observed in:** record-flattened IR — specifically the leading
-`let f = offset 0 clo` in each closure entry point  
-**Relevant pass:** [passes/record-flattening.md](passes/record-flattening.md)  
-**Source:** `src/RecordFlatten.hs:49`
-
-`flattenExp` handles `COffset` in two branches:
-
-- `Just atom` — forward the variable through the env; drop the binding if it
-  turns out to be dead.
-- `Nothing` — source record is unknown (e.g. a function parameter); keep the
-  binding **unconditionally**, without checking liveness.
-
-This means that when a closure entry point opens with
-`let f = offset 0 clo` (where `clo` is a parameter and therefore opaque), the
-binding is preserved even when `f` is immediately shadowed by a later binding
-or never used. In the bell00 debug output every state has exactly this dead
-binding at the top.
-
-Fix: in the `Nothing` branch, check `occursInExp v body'` after flattening the
-body, and drop the `COffset` if the variable is dead, mirroring the `Just`
-branch logic.
-
-```haskell
--- current (RecordFlatten.hs ~line 49)
-Nothing ->
-  COffset off val' v (flattenExp env' body)
-
--- proposed
-Nothing ->
-  let body' = flattenExp env' body
-  in if occursInExp v body'
-       then COffset off val' v body'
-       else body'
-```
-
 ---
 
 ## Free `_cp` variable left by defunctionalization
