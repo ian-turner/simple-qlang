@@ -40,17 +40,23 @@ multiple closures
 `Defunc.hs` builds a single global tag map from *all* synthetic closure labels
 in a declaration and uses it at *every* dispatch site. This means each
 `switch _cp { ... }` has arms for every closure tag in the module — most of
-which are unreachable from that specific call site. For bell00+output the
-dispatch tables are 5 and 7 arms wide respectively, when in practice each site
-only ever takes one arm.
+which are unreachable from that specific call site.
 
-The table width scales linearly with the number of closures in the program.
-For large programs this is a correctness-preserving but costly redundancy.
+**Scope after previous fixes:** dispatch sites where the closure tag is
+statically visible are now eliminated entirely by `RecordFlatten`'s
+`CSwitch (VInt n)` reduction (committed 7048dde). The remaining switches are
+only those where a continuation is passed as a function parameter and its tag
+is not locally known — genuinely dynamic dispatch. For bell00 this leaves 3
+switches of width 5; for output, 3 switches of width 7.
 
-The note in `passes/defunctionalization.md` already documents this as a known
-limitation. The long-term fix is per-call-site dispatch set analysis (only
-include labels whose type is compatible with the call site) or the standard
-shared-`apply`-function approach. Eliminating the identity continuation
-closures (see above) would also directly reduce the table width.
+**Fix requires 0-CFA:** narrowing these sites requires tracking, across
+declaration boundaries, which closure labels can flow to each continuation
+parameter slot — the same cross-declaration propagation that
+`ModuleRecordFlatten` does for record shapes, but for closure identity. A
+whole-module fixed-point iteration over the call graph would be needed.
+
+This is moderate effort and low urgency for current program sizes. Revisit
+when example programs grow large enough that table width becomes measurably
+costly.
 
 ---
